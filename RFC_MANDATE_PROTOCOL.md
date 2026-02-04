@@ -1,489 +1,261 @@
-# Valuya Guard RFC v1
+RFC: Valuya Guard v2
 
-**Title:** Valuya Guard – Payment-Driven Authorization Protocol  
-**Status:** Draft (Target: Final v1.0)  
-**Authors:** Valuya  
-**Last updated:** 2026-01-28
+Status: Draft → Stable Candidate
+Author: Valuya
+Version: v2.0
+Last updated: 2026-02-04
 
----
+1. Purpose
 
-## 1. Abstract
+Valuya Guard v2 defines a headless authorization & payment protocol that allows:
 
-Valuya Guard is a universal authorization protocol that unifies **payment and access control**
-into a single deterministic state transition.
+Humans and agents to access protected resources
 
-Instead of treating payment as a downstream business concern, Valuya Guard treats **payment as an
-authorization primitive**.
+Payments to be settled on-chain
 
-Access is granted **if and only if** a valid **Mandate** exists for a given **Subject** and
-**Resource**.
+Entitlements to be enforced without UI coupling
 
-The protocol is infrastructure-agnostic, identity-agnostic, and works for:
+Guard v2 is designed to be embedded in:
 
-- APIs
-- Websites
-- Files
-- Agents
-- AI systems
-- Physical locations
-- Spatial coordinates
+APIs
 
----
+Bots
 
-## 2. Motivation
+Serverless functions
 
-Modern systems split concerns across multiple layers:
+Autonomous agents
 
-- Authentication (Who are you?)
-- Authorization (What may you access?)
-- Payment (Did you pay?)
+2. Core Concepts
+   2.1 Subject
 
-This separation causes:
+A Subject represents the beneficiary of access.
 
-- duplicated logic
-- security gaps
-- poor automation support
-- fragile integrations
+Canonical format (MANDATORY):
 
-Valuya Guard collapses these concerns into a **single enforceable primitive**:  
-**the Mandate**.
-
----
-
-## 3. Core Concepts
-
-### 3.1 Resource (Canonical)
-
-A Resource represents anything that can be protected and monetized.
-
-Canonical format:
-
-# Valuya Guard RFC v1
-
-**Title:** Valuya Guard – Payment-Driven Authorization Protocol  
-**Status:** Draft (Target: Final v1.0)  
-**Authors:** Valuya  
-**Last updated:** 2026-01-28
-
----
-
-## 1. Abstract
-
-Valuya Guard is a universal authorization protocol that unifies **payment and access control**
-into a single deterministic state transition.
-
-Instead of treating payment as a downstream business concern, Valuya Guard treats **payment as an
-authorization primitive**.
-
-Access is granted **if and only if** a valid **Mandate** exists for a given **Subject** and
-**Resource**.
-
-The protocol is infrastructure-agnostic, identity-agnostic, and works for:
-
-- APIs
-- Websites
-- Files
-- Agents
-- AI systems
-- Physical locations
-- Spatial coordinates
-
----
-
-## 2. Motivation
-
-Modern systems split concerns across multiple layers:
-
-- Authentication (Who are you?)
-- Authorization (What may you access?)
-- Payment (Did you pay?)
-
-This separation causes:
-
-- duplicated logic
-- security gaps
-- poor automation support
-- fragile integrations
-
-Valuya Guard collapses these concerns into a **single enforceable primitive**:  
-**the Mandate**.
-
----
-
-## 3. Core Concepts
-
-### 3.1 Resource (Canonical)
-
-A Resource represents anything that can be protected and monetized.
-
-Canonical format:
-
-# Valuya Guard RFC v1
-
-**Title:** Valuya Guard – Payment-Driven Authorization Protocol  
-**Status:** Draft (Target: Final v1.0)  
-**Authors:** Valuya  
-**Last updated:** 2026-01-28
-
----
-
-## 1. Abstract
-
-Valuya Guard is a universal authorization protocol that unifies **payment and access control**
-into a single deterministic state transition.
-
-Instead of treating payment as a downstream business concern, Valuya Guard treats **payment as an
-authorization primitive**.
-
-Access is granted **if and only if** a valid **Mandate** exists for a given **Subject** and
-**Resource**.
-
-The protocol is infrastructure-agnostic, identity-agnostic, and works for:
-
-- APIs
-- Websites
-- Files
-- Agents
-- AI systems
-- Physical locations
-- Spatial coordinates
-
----
-
-## 2. Motivation
-
-Modern systems split concerns across multiple layers:
-
-- Authentication (Who are you?)
-- Authorization (What may you access?)
-- Payment (Did you pay?)
-
-This separation causes:
-
-- duplicated logic
-- security gaps
-- poor automation support
-- fragile integrations
-
-Valuya Guard collapses these concerns into a **single enforceable primitive**:  
-**the Mandate**.
-
----
-
-## 3. Core Concepts
-
-### 3.1 Resource (Canonical)
-
-A Resource represents anything that can be protected and monetized.
-
-Canonical format:
-
-# Valuya Guard RFC v1
-
-**Title:** Valuya Guard – Payment-Driven Authorization Protocol  
-**Status:** Draft (Target: Final v1.0)  
-**Authors:** Valuya  
-**Last updated:** 2026-01-28
-
----
-
-## 1. Abstract
-
-Valuya Guard is a universal authorization protocol that unifies **payment and access control**
-into a single deterministic state transition.
-
-Instead of treating payment as a downstream business concern, Valuya Guard treats **payment as an
-authorization primitive**.
-
-Access is granted **if and only if** a valid **Mandate** exists for a given **Subject** and
-**Resource**.
-
-The protocol is infrastructure-agnostic, identity-agnostic, and works for:
-
-- APIs
-- Websites
-- Files
-- Agents
-- AI systems
-- Physical locations
-- Spatial coordinates
-
----
-
-## 2. Motivation
-
-Modern systems split concerns across multiple layers:
-
-- Authentication (Who are you?)
-- Authorization (What may you access?)
-- Payment (Did you pay?)
-
-This separation causes:
-
-- duplicated logic
-- security gaps
-- poor automation support
-- fragile integrations
-
-Valuya Guard collapses these concerns into a **single enforceable primitive**:  
-**the Mandate**.
-
----
-
-## 3. Core Concepts
-
-### 3.1 Resource (Canonical)
-
-A Resource represents anything that can be protected and monetized.
-
-Canonical format:
-
-# Valuya Guard RFC v1
-
-**Title:** Valuya Guard – Payment-Driven Authorization Protocol  
-**Status:** Draft (Target: Final v1.0)  
-**Authors:** Valuya  
-**Last updated:** 2026-01-28
-
----
-
-## 1. Abstract
-
-Valuya Guard is a universal authorization protocol that unifies **payment and access control**
-into a single deterministic state transition.
-
-Instead of treating payment as a downstream business concern, Valuya Guard treats **payment as an
-authorization primitive**.
-
-Access is granted **if and only if** a valid **Mandate** exists for a given **Subject** and
-**Resource**.
-
-The protocol is infrastructure-agnostic, identity-agnostic, and works for:
-
-- APIs
-- Websites
-- Files
-- Agents
-- AI systems
-- Physical locations
-- Spatial coordinates
-
----
-
-## 2. Motivation
-
-Modern systems split concerns across multiple layers:
-
-- Authentication (Who are you?)
-- Authorization (What may you access?)
-- Payment (Did you pay?)
-
-This separation causes:
-
-- duplicated logic
-- security gaps
-- poor automation support
-- fragile integrations
-
-Valuya Guard collapses these concerns into a **single enforceable primitive**:  
-**the Mandate**.
-
----
-
-## 3. Core Concepts
-
-### 3.1 Resource (Canonical)
-
-A Resource represents anything that can be protected and monetized.
-
-Canonical format:
-
-<namespace>:<type>:<identifier>
+<type>:<id>
 
 Examples:
 
-http:route:GET:/api/v1/data
-wp:path:/premium/
-file:download:/reports/q4.pdf
-superworld:geo:52.5200 13.4050:radius:30
-ai:model:trading-agent-v2
-telegram:group:-100112312321
+user:526
 
-Rules:
+anon:telegram_123456
 
-- Deterministic
-- Human-readable
-- Infrastructure-independent
-- Trailing slashes preserved where applicable
+agent:my-bot-v1
 
----
+org:acme
 
-### 3.2 Subject
+Transport:
 
-Subjects are entities requesting access.
+X-Valuya-Subject: <type>:<id>
 
-Canonical form:
+2.2 Resource
 
-<subject_type>:<subject_id>
+A Resource is a stable identifier for what is being protected.
 
 Examples:
 
-anon:uuid
-user:privy_abc123
-agent:ci_runner_42
-wallet:0xabc123213...
+api:path:/v1/generate
 
-Valuya Guard does not enforce a specific identity provider.
+telegram:bot:premium_chat
 
----
+discord:server:123456:role:premium
 
-### 3.3 Mandate
+fastapi:route:/predict
 
-A Mandate is a verifiable entitlement stating that:
+Resources MUST be deterministic and stable.
 
-> A Subject is allowed to access a Resource under defined conditions.
+2.3 Plan
 
-Mandates may define:
+A Plan defines the entitlement tier.
 
-- duration
-- plan
-- expiration
-- revocation
-- scope
+Examples:
 
-Mandates are the **single source of truth** for authorization.
+free
 
----
+pro
 
-## 4. Protocol Flow
+enterprise
 
-### 4.1 Request Lifecycle
+Plans are opaque strings to Guard — semantics are product-defined.
 
-Client -> Guard -> Decision -> Origin
+2.4 Mandate
 
-1. Resolve Subject
-2. Resolve Resource
-3. Evaluate required plan
-4. Check entitlement
+A Mandate is the on-chain-backed entitlement created after payment.
 
----
+Uniqueness constraint:
 
-### 4.2 Allow
+(tenant_id, subject_type, subject_id, resource, plan, product_id)
 
-If a valid mandate exists:
+Mandates are idempotent and time-bound.
 
-- Request is forwarded
-- Response is unchanged
-- Optional observability headers MAY be added
+3. Guard v2 Protocol Flow
+   3.1 Entitlement Check (HEADLESS)
 
----
+Endpoint
 
-### 4.3 Deny (Payment Required)
+POST /api/v2/entitlements/check
 
-If no mandate exists:
+Headers
 
-- A checkout session is **always created**
+Authorization: Bearer <TENANT_TOKEN>
+X-Valuya-Subject: <type>:<id>
+Content-Type: application/json
 
-#### API / Agent / Fetch
+Body
 
-HTTP/1.1 402 Payment Required
+{
+"resource": "telegram:bot:premium_chat",
+"plan": "pro"
+}
 
-1. Resolve Subject
-2. Resolve Resource
-3. Evaluate required plan
-4. Check entitlement
+3.2 Responses
+✅ Authorized
+{
+"authorized": true,
+"mandate_id": 42
+}
 
----
+💳 Payment Required
+{
+"authorized": false,
+"checkout_required": true,
+"session_id": "cs_xxx",
+"payment": {
+"method": "onchain",
+"chain_id": 8453,
+"token": "USDC",
+"to_address": "0x...",
+"amount_raw": "9900000",
+"decimals": 6,
+"token_address": "0x..."
+}
+}
 
-### 4.2 Allow
+3.3 Agent Payment Submission
 
-If a valid mandate exists:
+Endpoint
 
-- Request is forwarded
-- Response is unchanged
-- Optional observability headers MAY be added
+POST /api/v2/agent/sessions/{sessionId}/tx
 
----
+Body
 
-### 4.3 Deny (Payment Required)
+{
+"tx_hash": "0xabc...",
+"from_address": "0xagentwallet",
+"signature": "0xsigned_proof"
+}
 
-If no mandate exists:
+3.4 Verification (Agent-only, No UI)
 
-- A checkout session is **always created**
+Endpoint
 
-#### API / Agent / Fetch
+POST /api/v2/agent/sessions/{sessionId}/verify
 
-302 Found
-Location <paymnet_url>
+Body
 
----
+{
+"from_address": "0xagentwallet"
+}
 
-### 4.4 State Transition
+Response
 
-DENIED
-payment
-MANDATE CREATED
-retry
-ALLOWED
+{
+"ok": true,
+"state": "confirmed",
+"mandate_id": 123
+}
 
----
+4. Security Model
+   4.1 Agent Identity
 
-## 5. Backend Interfaces (v2)
+Agents MUST:
 
-### 5.1 Entitlements
+Control the wallet submitting payment
 
-`GET /api/v2/entitlements`
+Sign a proof over (session_id, tx_hash, resource)
 
-Returns whether a mandate is active.
+Be allowlisted per (tenant, subject)
 
----
+This guarantees:
 
-### 5.2 Checkout Sessions
+Non-repudiation
 
-`POST /api/v2/checkout/sessions`
+Replay protection
 
-Creates a payment-bound session for a mandate.
+No spoofing of subjects
 
----
+4.2 Trust Boundaries
+Component Trust Level
+Guard backend Trusted
+Agent wallet Cryptographically verified
+Adapter (bot/API) Untrusted
+Subject identifier User-defined 5. Adapter Implementation Guide
+5.1 Telegram Bot Adapter
+Subject Strategy
+subject = {
+type: "anon",
+id: `telegram_${chat.id}`
+}
 
-### 5.3 Polling
+Resource Strategy
+resource = "telegram:bot:premium_chat"
 
-`GET /api/v2/checkout/sessions/{session_id}`
+Flow
 
-Used by humans and agents alike.
+User sends /premium
 
----
+Bot calls Guard entitlements/check
 
-## 6. Security Model
+If unauthorized:
 
-- No access without mandate
-- Payment creation is idempotent
-- Mandates are authoritative
-- Clients cannot self-assert access
+Reply with payment instructions
 
----
+Agent wallet pays
 
-## 7. Why This Is New
+Bot verifies session
 
-Valuya Guard is not a payment system or a paywall.
+Access granted (e.g. unlock commands)
 
-It is an **authorization protocol where payment is a state transition**.
+Example Guard Call (Node.js)
+await checkEntitlement({
+baseUrl,
+tenanttoken,
+subject,
+resource,
+plan: "pro",
+})
 
-Once adopted, systems no longer ask:
+5.2 Discord Bot Adapter
+Subject Strategy
+subject = {
+type: "anon",
+id: `discord_${user.id}`
+}
 
-> “Did the user pay?”
+Resource Strategy
+resource = `discord:server:${guild.id}:role:premium`
 
-They only ask:
+Enforcement
 
-> **“Is there a mandate?”**
+Grant Discord role after mandate
 
----
+Periodically re-check mandate validity
 
-## 8. Roadmap
+5.3 FastAPI Adapter
+Subject Strategy
+subject = {
+"type": "user",
+"id": str(current_user.id)
+}
 
-- v1.0: RFC lock, npm publish
-- v1.1: Product-Creation API
-- v1.2: Agent-native payments
-- v2.0: On-chain mandate anchoring (optional)
+Resource Strategy
+resource = f"fastapi:route:{request.url.path}"
 
----
+Middleware Example
+@app.middleware("http")
+async def guard_middleware(request: Request, call_next):
+subject = resolve_subject(request)
+res = guard_check(subject, resource, plan="pro")
+if not res.authorized:
+raise HTTPException(402, "Payment required")
+return await call_next(request)
