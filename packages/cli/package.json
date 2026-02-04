@@ -1,0 +1,19 @@
+{
+  "name": "@valuya/cli",
+  "version": "0.1.0",
+  "type": "commonjs",
+  "bin": {
+    "valuya": "dist/bin.js"
+  },
+  "dependencies": {
+    "@valuya/agent": "file:../agent",
+    "commander": "^12.1.0",
+    "ethers": "^6.13.0",
+    "dotenv": "^16.4.5",
+    "chalk": "^5.3.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "pnpm build"
+  }
+}

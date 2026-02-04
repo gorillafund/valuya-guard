@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Valuya Guard POC – protected Lambda
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 10
+    MemorySize: 256
+
+Resources:
+  ValuyaHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: Prod
+
+  ProtectedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: sam-app/
+      # NOTE: handler.mjs exports `handler`, and SAM uses "file.exportName"
+      Handler: src/handler.handler
+      Runtime: nodejs20.x
+      Events:
+        ProtectedRoute:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ValuyaHttpApi
+            Path: /protected
+            Method: GET
+      Environment:
+        Variables:
+          VALUYA_BASE: "https://pay.gorilla.build"
+          VALUYA_SITE_TOKEN: "wp_site_1_oCBDm9Ps6e02s1W3CTcflN0S1BhusWpScMSaGI1j5U08ajH6"
+          VALUYA_RESOURCE: "wp:path:/protected/"
+          VALUYA_PLAN: "pro"
+          VALUYA_CURRENCY: "EUR"
+          VALUYA_AMOUNT_CENTS: "9900"
+          VALUYA_SUCCESS_URL: "http://localhost:3000/protected"
+          VALUYA_CANCEL_URL: "http://localhost:3000/protected"
+          # optional:
+          # VALUYA_CHECKOUT_BASE: "https://pay.gorilla.build"
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handler.mjs
+        Format: cjs
+        Target: es2022
+        Sourcemap: true
+        Minify: false
+
+Outputs:
+  ProtectedUrl:
+    Description: Protected endpoint (deployed)
+    Value: !Sub "https://${ValuyaHttpApi}.execute-api.${AWS::Region}.amazonaws.com/protected"
