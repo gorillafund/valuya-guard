@@ -259,3 +259,47 @@ res = guard_check(subject, resource, plan="pro")
 if not res.authorized:
 raise HTTPException(402, "Payment required")
 return await call_next(request)
+
+6. Design Principles (Non-Negotiable)
+
+Headless-first (no redirects required)
+
+Agents are first-class
+
+Payments are explicit
+
+Mandates are the only source of truth
+
+Adapters are dumb, Guard is smart
+
+7. Non-Goals
+
+Wallet UX
+
+Pricing logic
+
+Subscription management UI
+
+Fiat rails (yet)
+
+8. Versioning
+
+Guard v2 APIs are stable
+
+Breaking changes require Guard v3
+
+Mandate schema is append-only
+
+9. Why This Matters
+
+Guard v2 enables:
+
+Autonomous agent economies
+
+Pay-per-call AI
+
+Bot monetization
+
+On-chain SaaS entitlements
+
+Without coupling identity, UI, or platform.
