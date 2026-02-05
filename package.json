@@ -1,6 +1,6 @@
 {
   "name": "valuya-guard",
-  "private": true,
+  "private": false,
   "workspaces": [
     "packages/*",
     "examples/*"

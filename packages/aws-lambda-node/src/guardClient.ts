@@ -48,6 +48,8 @@ export async function createCheckoutSession(args: {
   resource: string
   subject: { type: string; id: string }
   required: GuardRequired
+  currency: string
+  amountCents: number
   successUrl?: string
   cancelUrl?: string
   idempotencyKey?: string
@@ -67,6 +69,8 @@ export async function createCheckoutSession(args: {
     success_url: args.successUrl || "",
     cancel_url: args.cancelUrl || "",
     idempotency_key: args.idempotencyKey || "",
+    currency: args.currency,
+    amount_cents: args.amountCents,
   }
 
   const headers: Record<string, string> = {
@@ -94,15 +98,18 @@ export async function createCheckoutSession(args: {
   if (!resp.ok) throw new ValuyaHttpError(resp.status, txt.slice(0, 300))
 
   const json = safeJson(txt) as any
-  if (!json?.payment_url || !json?.session_id) {
-    throw new Error("checkout_session_missing_fields")
+  if (!json?.session_id) {
+    throw new ValuyaHttpError(
+      422,
+      `Invalid checkout session response: ${JSON.stringify(json)}`,
+    )
   }
 
   return {
-    payment_url: json.payment_url,
     session_id: json.session_id,
     expires_at: json.expires_at,
-    payment: json.payment, // optional hint passthrough
+    payment_url: json.payment_url ?? null,
+    payment: json.payment ?? null,
   }
 }
 

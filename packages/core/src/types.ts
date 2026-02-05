@@ -154,7 +154,7 @@ export type PaymentRequiredBody = {
   reason: string // e.g. "subscription_inactive"
   required: GuardRequired
   evaluated_plan: string
-  resource: CanonicalResource
+  resource: string
 
   session_id: string
   payment_url: string

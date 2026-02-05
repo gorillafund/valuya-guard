@@ -8,7 +8,7 @@ export type PaymentRequiredResponseBody = {
   reason: string
   required: GuardRequired
   evaluated_plan: string
-  resource: CanonicalResource
+  resource: string
   session_id: string
   payment_url: string
   payment?: PaymentInstruction
@@ -24,7 +24,7 @@ export function paymentRequiredResponse(args: {
   reason: string
   required: GuardRequired
   evaluatedPlan: string
-  resource: CanonicalResource
+  resource: string
   paymentUrl: string
   sessionId: string
   payment?: PaymentInstruction

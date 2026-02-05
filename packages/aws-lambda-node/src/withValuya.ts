@@ -61,6 +61,8 @@ export function withValuya(
       resource,
       subject: subjectWire,
       required,
+      currency: "EUR",
+      amountCents: 1,
       successUrl: opts.successUrl,
       cancelUrl: opts.cancelUrl,
       idempotencyKey,
@@ -68,30 +70,29 @@ export function withValuya(
 
     // RFC: HTML → redirect (still after checkout session creation)
 
-    if (wantsHtml(event)) {
+    // Browser flow (UI)
+    if (wantsHtml(event) && session.payment_url) {
       return {
         statusCode: 302,
         headers: {
-          "Cache-Control": "no-store",
           Location: session.payment_url,
-
-          // Optional, useful for clients:
-          "X-Valuya-Payment-Url": session.payment_url,
           "X-Valuya-Session-Id": session.session_id,
         },
         body: "",
       }
     }
 
-    // RFC: API/agents → 402 JSON built centrally by core
+    // Agent / API flow
     const resp = paymentRequiredResponse({
-      reason: (ent as any)?.reason || "subscription_inactive",
+      reason: (ent as any)?.reason || "payment_required",
       required,
       evaluatedPlan,
-      resource: resource as any, // resource is canonical string by construction in core helper
-      paymentUrl: session.payment_url,
+      resource: resource as any,
       sessionId: session.session_id,
-      payment: (session as any).payment, // optional payment hint
+
+      // IMPORTANT:
+      paymentUrl: session.payment_url ?? undefined,
+      payment: session.payment ?? undefined,
     })
 
     return {
