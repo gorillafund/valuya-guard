@@ -9,7 +9,7 @@ export function withValuya(
   handler: LambdaHandler,
 ): LambdaHandler {
   const valuyaBase = opts.valuyaBase || process.env.VALUYA_BASE || ""
-  const tenanttoken = opts.tenanttoken || process.env.VALUYA_SITE_TOKEN || ""
+  const tenant_token = opts.tenant_token || process.env.VALUYA_SITE_TOKEN || ""
 
   // IMPORTANT: use VALUYA_PLAN (matches your SAM template)
   const plan = (opts.plan || process.env.VALUYA_PLAN || "pro").trim() || "pro"
@@ -29,7 +29,7 @@ export function withValuya(
     if (!resource) throw new Error("withValuya: missing resource")
 
     const ent = await fetchEntitlements({
-      cfg: { base: valuyaBase, tenanttoken: tenanttoken || undefined },
+      cfg: { base: valuyaBase, tenant_token: tenant_token || undefined },
       plan,
       resource,
       subject: subjectWire,
@@ -56,7 +56,7 @@ export function withValuya(
     )
 
     const session = await createCheckoutSession({
-      cfg: { base: valuyaBase, tenanttoken: tenanttoken || undefined },
+      cfg: { base: valuyaBase, tenant_token: tenant_token || undefined },
       plan: evaluatedPlan,
       resource,
       subject: subjectWire,

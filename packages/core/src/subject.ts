@@ -6,6 +6,7 @@ export type Subject =
   | { type: "agent"; id: string }
   | { type: "wallet"; id: string }
   | { type: "api_key"; id: string }
+  | { type: "telegram"; id: string }
 
 export type CanonicalSubject = Subject
 

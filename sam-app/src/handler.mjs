@@ -47,9 +47,9 @@ async function protectedHandler(event) {
 // IMPORTANT: pass protectedHandler as SECOND argument
 export const handler = withValuya(
   {
-    // NOTE: your package likely expects `valuyaBase` + `tenanttoken` (not baseUrl)
+    // NOTE: your package likely expects `valuyaBase` + `tenant_token` (not baseUrl)
     valuyaBase: process.env.VALUYA_BASE_URL || process.env.VALUYA_BASE || "",
-    tenanttoken: process.env.VALUYA_SITE_TOKEN || "",
+    tenant_token: process.env.VALUYA_SITE_TOKEN || "",
 
     resource: process.env.VALUYA_RESOURCE || "",
     plan: process.env.VALUYA_PLAN || "pro",

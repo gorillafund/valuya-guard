@@ -219,7 +219,7 @@ Access granted (e.g. unlock commands)
 Example Guard Call (Node.js)
 await checkEntitlement({
 baseUrl,
-tenanttoken,
+tenant_token,
 subject,
 resource,
 plan: "pro",

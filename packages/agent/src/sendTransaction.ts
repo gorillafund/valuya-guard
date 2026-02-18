@@ -7,6 +7,7 @@ import {
   TransactionResponse,
 } from "ethers"
 import "dotenv/config"
+import type { OnchainPaymentInstruction } from "./types.js"
 
 // Custom error for better debugging
 export class SendTransactionError extends Error {
@@ -20,16 +21,7 @@ export class SendTransactionError extends Error {
 }
 
 interface SendTransactionArgs {
-  payment: {
-    method: "onchain"
-    currency: string // e.g. "EUR"
-    token: string // e.g. "EURe"
-    chain_id: number // e.g. 137 or 8453
-    to_address: string
-    amount_raw: string // e.g. "10000000000000000"
-    decimals: number // 18
-    token_address: string
-  }
+  payment: OnchainPaymentInstruction
   rpcUrl?: string // optional override
   privateKey?: string // optional override
 }
@@ -127,8 +119,6 @@ export async function sendTransaction({
       // Optional: add gas overrides if needed on congested chains
       // gasLimit: 120000,
     })
-
-    console.log(`✔ Transaction sent: ${tx.hash}`)
 
     // Optional: await confirmation (uncomment if you want to wait)
     // const receipt = await tx.wait(1);

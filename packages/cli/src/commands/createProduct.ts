@@ -16,7 +16,7 @@ export function cmdAgentProductCreate(program: Command) {
     .description("Create a Product as an allowlisted agent")
     .action(async () => {
       const base = required("VALUYA_BASE")
-      const tenanttoken = required("VALUYA_TENANT_TOKEN")
+      const tenant_token = required("VALUYA_TENANT_TOKEN")
       const subject = required("VALUYA_SUBJECT")
       const privateKey = required("VALUYA_PRIVATE_KEY")
 
@@ -52,7 +52,7 @@ export function cmdAgentProductCreate(program: Command) {
       console.log(chalk.cyan("→ Creating product as agent..."))
 
       const out = await createProductAsAgent({
-        cfg: { base, tenanttoken },
+        cfg: { base, tenant_token },
         principal: { type: subjectType, id: subjectId },
         wallet,
         product,

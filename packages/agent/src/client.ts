@@ -15,7 +15,7 @@ function headers(cfg: AgentConfig): Record<string, string> {
     Accept: "application/json",
     "Content-Type": "application/json",
   }
-  if (cfg.tenanttoken) h.Authorization = `Bearer ${cfg.tenanttoken}`
+  if (cfg.tenant_token) h.Authorization = `Bearer ${cfg.tenant_token}`
   return h
 }
 
@@ -24,13 +24,18 @@ export async function createCheckoutSession(args: {
   plan: string
   evaluated_plan?: string
   resource: string
-  subject: SubjectWire
-  required: any
+  subject: SubjectWire | string
+  required?: any
+  principal?: { type: string; id: string }
+  anchor_resource?: string
   success_url?: string
   cancel_url?: string
   idempotencyKey?: string
-  tenant_id?: number
   product_id?: number
+  payment_currency?: string
+  currency?: string
+  amount_cents?: number
+  meta?: Record<string, any>
 }): Promise<CheckoutSessionResponse> {
   const base = normalizeBase(args.cfg.base)
   const url = base + "/api/v2/checkout/sessions"
@@ -38,28 +43,46 @@ export async function createCheckoutSession(args: {
   const h = headers(args.cfg)
   if (args.idempotencyKey) h["Idempotency-Key"] = args.idempotencyKey
 
+  // Build body ONLY with fields your backend expects
+  const body: any = {
+    product_id: args.product_id,
+    plan: args.plan,
+    evaluated_plan: args.evaluated_plan ?? args.plan,
+    resource: args.resource,
+    subject: args.subject,
+    required: args.required,
+    success_url: args.success_url ?? "",
+    cancel_url: args.cancel_url ?? "",
+    idempotency_key: args.idempotencyKey ?? "",
+  }
+
+  if (args.principal) body.principal = args.principal
+  if (args.anchor_resource) body.anchor_resource = args.anchor_resource
+  if (args.required) body.required = args.required
+  if (args.product_id) body.product_id = args.product_id
+
+  if (args.payment_currency) {
+    body.payment = { currency: args.payment_currency }
+  }
+
+  if (args.success_url) body.success_url = args.success_url
+  if (args.cancel_url) body.cancel_url = args.cancel_url
+  if (args.idempotencyKey) body.idempotency_key = args.idempotencyKey
+  if (args.meta) body.meta = args.meta
+
   const resp = await fetch(url, {
     method: "POST",
     headers: h,
-    body: JSON.stringify({
-      tenant_id: args.tenant_id,
-      product_id: args.product_id,
-      plan: args.plan,
-      evaluated_plan: args.evaluated_plan ?? args.plan,
-      resource: args.resource,
-      subject: args.subject,
-      required: args.required,
-      success_url: args.success_url ?? "",
-      cancel_url: args.cancel_url ?? "",
-      idempotency_key: args.idempotencyKey ?? "",
-    }),
+    body: JSON.stringify(body),
   })
 
   const txt = await resp.text()
-  if (!resp.ok)
+  if (!resp.ok) {
     throw new Error(
-      `createCheckoutSession_failed:${resp.status}:${txt.slice(0, 200)}`,
+      `createCheckoutSession_failed:${resp.status}:${txt.slice(0, 300)}`,
     )
+  }
+
   return JSON.parse(txt)
 }
 
@@ -67,8 +90,9 @@ export async function submitAgentTx(args: {
   cfg: AgentConfig
   sessionId: string
   tx_hash: string
-  from_address: string
+  wallet_address: string
   signature: string
+  proof: any
 }): Promise<AgentSubmitTxResponse> {
   const base = normalizeBase(args.cfg.base)
   const url =
@@ -79,14 +103,15 @@ export async function submitAgentTx(args: {
     headers: headers(args.cfg),
     body: JSON.stringify({
       tx_hash: args.tx_hash,
-      from_address: args.from_address,
+      wallet_address: args.wallet_address,
       signature: args.signature,
+      proof: args.proof,
     }),
   })
 
   const txt = await resp.text()
   if (!resp.ok)
-    throw new Error(`submitAgentTx_failed:${resp.status}:${txt.slice(0, 200)}`)
+    throw new Error(`submitAgentTx_failed:${resp.status}:${txt.slice(0, 300)}`)
   return JSON.parse(txt)
 }
 

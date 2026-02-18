@@ -1,8 +1,9 @@
 import { Wallet } from "ethers"
 import { stableStringify, sha256Hex } from "./hash"
+import { createHash } from "crypto"
 
 export async function createAgentChallenge(args: {
-  cfg: { base: string; tenanttoken: string }
+  cfg: { base: string; tenant_token: string }
   principal: { type: string; id: string }
   wallet_address: string
   action: "product:create"
@@ -12,7 +13,7 @@ export async function createAgentChallenge(args: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${args.cfg.tenanttoken}`,
+      Authorization: `Bearer ${args.cfg.tenant_token}`,
     },
     body: JSON.stringify({
       principal_subject_type: args.principal.type,
@@ -30,14 +31,14 @@ export async function createAgentChallenge(args: {
 }
 
 export async function createProductAsAgent(args: {
-  cfg: { base: string; tenanttoken: string }
+  cfg: { base: string; tenant_token: string }
   principal: { type: string; id: string }
   wallet: Wallet
   product: any
 }) {
   const walletAddr = (await args.wallet.getAddress()).toLowerCase()
-  const canonical = stableStringify(args.product)
-  const request_sha256 = sha256Hex(canonical)
+  const canonical = stableJson(args.product)
+  const request_sha256 = sha256HexUtf8(canonical)
 
   const ch = await createAgentChallenge({
     cfg: args.cfg,
@@ -53,7 +54,7 @@ export async function createProductAsAgent(args: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${args.cfg.tenanttoken}`,
+      Authorization: `Bearer ${args.cfg.tenant_token}`,
     },
     body: JSON.stringify({
       principal_subject_type: args.principal.type,
@@ -71,4 +72,36 @@ export async function createProductAsAgent(args: {
       `createProductAsAgent_failed:${res.status}:${await res.text()}`,
     )
   return await res.json()
+}
+
+function stableNormalize(v: any): any {
+  if (Array.isArray(v)) {
+    // list: keep order
+    return v.map(stableNormalize)
+  }
+
+  if (v && typeof v === "object") {
+    // object: sort keys; drop undefined (JSON.stringify does this too)
+    const out: Record<string, any> = {}
+    for (const k of Object.keys(v).sort()) {
+      const vv = v[k]
+      if (vv === undefined) continue
+      out[k] = stableNormalize(vv)
+    }
+    return out
+  }
+
+  // primitives
+  return v
+}
+
+export function stableJson(value: any): string {
+  const normalized = stableNormalize(value)
+  // Match PHP: JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+  // JS already doesn't escape slashes; and keeps unicode.
+  return JSON.stringify(normalized)
+}
+
+export function sha256HexUtf8(s: string): string {
+  return createHash("sha256").update(s, "utf8").digest("hex")
 }

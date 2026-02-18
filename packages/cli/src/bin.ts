@@ -6,6 +6,8 @@ import { cmdSubmitTx } from "./commands/submitTx.js"
 import { cmdWait } from "./commands/wait.js"
 import { cmdAgentPay } from "./commands/agentPay.js"
 import { cmdAgentProductCreate } from "./commands/createProduct.js"
+import { cmdAgentAddAllowlist } from "./commands/allowlistAdd.js"
+import { cmdAgentProductsList } from "./commands/listProducts.js"
 const program = new Command()
 
 program.name("valuya").description("Valuya Guard agent CLI").version("0.1.0")
@@ -16,6 +18,8 @@ cmdSubmitTx(program)
 cmdWait(program)
 cmdAgentPay(program)
 cmdAgentProductCreate(program)
+cmdAgentAddAllowlist(program)
+cmdAgentProductsList(program)
 
 program.parseAsync(process.argv).catch((e) => {
   console.error(String(e.message ?? e))

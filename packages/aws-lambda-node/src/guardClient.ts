@@ -5,7 +5,7 @@ import { ValuyaConfigError, ValuyaHttpError } from "./errors.js"
 
 export type GuardClientConfig = {
   base: string
-  tenanttoken?: string
+  tenant_token?: string
 }
 
 export async function fetchEntitlements(args: {
@@ -33,7 +33,7 @@ export async function fetchEntitlements(args: {
     "X-Valuya-Subject-Id-Raw": subject.id, // avoid collision; keep if your backend expects split headers
   }
 
-  if (cfg.tenanttoken) headers.Authorization = `Bearer ${cfg.tenanttoken}`
+  if (cfg.tenant_token) headers.Authorization = `Bearer ${cfg.tenant_token}`
 
   const resp = await fetch(u.toString(), { method: "GET", headers })
   const txt = await resp.text().catch(() => "")
@@ -86,7 +86,7 @@ export async function createCheckoutSession(args: {
   }
 
   if (args.idempotencyKey) headers["Idempotency-Key"] = args.idempotencyKey
-  if (cfg.tenanttoken) headers.Authorization = `Bearer ${cfg.tenanttoken}`
+  if (cfg.tenant_token) headers.Authorization = `Bearer ${cfg.tenant_token}`
 
   const resp = await fetch(url, {
     method: "POST",

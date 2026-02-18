@@ -1,7 +1,5 @@
 // packages/core/src/types.ts
 
-import type { CanonicalResource } from "./resource.ts"
-
 /**
  * PaymentInstruction
  *
@@ -21,6 +19,7 @@ export type PaymentInstruction =
       amount_raw: string // uint256 decimal string
       decimals: number // e.g. 18
       token_address?: string // optional but useful
+      is_free?: false
     }
   | {
       method: "fiat"
@@ -30,6 +29,7 @@ export type PaymentInstruction =
       recipient_name?: string
       memo?: string
       amount: string // e.g. "99.00"
+      is_free?: false
     }
 
 /**
@@ -161,3 +161,10 @@ export type PaymentRequiredBody = {
 
   payment?: PaymentInstruction
 }
+
+/**
+ * Entitlements response returned by:
+ *   GET /api/v2/entitlements
+ *
+ * This is the single source of truth for Guard v2 access checks.
+ */

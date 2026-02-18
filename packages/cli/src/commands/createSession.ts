@@ -5,7 +5,7 @@ export function cmdCreateSession(program: Command) {
   program
     .command("create-session")
     .requiredOption("--base <url>")
-    .option("--tenanttoken <token>", "Tenant token (Bearer token)")
+    .option("--tenant_token <token>", "Tenant token (Bearer token)")
     .requiredOption("--plan <plan>")
     .requiredOption("--resource <resource>")
     .requiredOption("--subject <subject>", 'e.g. "anon:526"')
@@ -13,7 +13,7 @@ export function cmdCreateSession(program: Command) {
     .action(async (opts) => {
       const [type, id] = String(opts.subject).split(":")
       const res = await createCheckoutSession({
-        cfg: { base: opts.base, tenanttoken: opts.tenanttoken },
+        cfg: { base: opts.base, tenant_token: opts.tenant_token },
         plan: opts.plan,
         evaluated_plan: opts.plan,
         resource: opts.resource,

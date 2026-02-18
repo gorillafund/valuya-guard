@@ -20,7 +20,7 @@ export type WithValuyaOptions = {
   subject?: (event: any) => Subject // override if you want
 
   valuyaBase?: string // default env.VALUYA_BASE
-  tenanttoken?: string // default env.VALUYA_SITE_TOKEN
+  tenant_token?: string // default env.VALUYA_SITE_TOKEN
 
   // Optional URLs passed to checkout session creator:
   successUrl?: string
