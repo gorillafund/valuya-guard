@@ -1,93 +1,108 @@
 import type { Command } from "commander"
 import "dotenv/config"
+import fs from "node:fs/promises"
+import path from "node:path"
 import chalk from "chalk"
-import { Wallet, isAddress } from "ethers"
-import { allowlistAdd } from "@valuya/agent"
 
-function required(name: string): string {
+import { allowlistAdd } from "@valuya/agent"
+import type { AllowlistAddRequest } from "@valuya/agent"
+
+function requiredEnv(name: string): string {
   const v = process.env[name]
   if (!v) throw new Error(`Missing required env var: ${name}`)
   return v
 }
 
-function parseSubject(sub: string): { type: string; id: string } {
-  const [type, ...rest] = sub.split(":")
-  const id = rest.join(":")
-  if (!type || !id)
-    throw new Error(`Invalid subject "${sub}" (expected "<type>:<id>")`)
-  return { type, id }
+function logStep(msg: string) {
+  console.log(chalk.cyan(`→ ${msg}`))
+}
+function logOk(msg: string) {
+  console.log(chalk.green(`✔ ${msg}`))
+}
+function logErr(msg: string) {
+  console.error(chalk.red(`✖ ${msg}`))
 }
 
-export function cmdAgentAddAllowlist(program: Command) {
+async function readJsonFile(file: string): Promise<any> {
+  const filePath = path.resolve(process.cwd(), file)
+  const raw = await fs.readFile(filePath, "utf8")
+  return JSON.parse(raw)
+}
+
+export function cmdAgentAllowlistAdd(program: Command) {
   program
-    .command("agent:allowlist:add")
-    .description("Add an agent wallet to the allowlist (tenant token required)")
-    .action(async () => {
-      const base = required("VALUYA_BASE")
-      const tenant_token = required("VALUYA_TENANT_TOKEN")
+    .command("allowlist:add")
+    .description("Add a wallet to the allowlist (agent flow)")
+    .option("--file <path>", "Path to allowlist.json")
+    .option("--principal <type:id>", "Principal subject, e.g. user:123")
+    .option("--wallet <address>", "Wallet address 0x…")
+    .option("--plan <plan>", "Optional plan restriction")
+    .option(
+      "--resource-prefix <prefix>",
+      "Optional resource prefix restriction",
+    )
+    .option("--max-amount-cents <n>", "Optional max amount in cents")
+    .option("--expires-at <iso>", "Optional expiry ISO8601")
+    .option("--status <active|disabled>", "Status", "active")
+    .action(async (opts) => {
+      try {
+        logStep("Loading environment")
 
-      // principal = who authorizes this agent (for now: tenant:2 works; later: user:526)
-      const principalSub = required("VALUYA_SUBJECT")
-      const { type: principal_subject_type, id: principal_subject_id } =
-        parseSubject(principalSub)
+        const cfg = {
+          base: requiredEnv("VALUYA_BASE"),
+          tenant_token: requiredEnv("VALUYA_TENANT_TOKEN"),
+        }
 
-      // wallet to allowlist: use explicit env var if provided, otherwise derive from private key
-      const walletAddressEnv = process.env.VALUYA_ALLOWLIST_WALLET
-      const privateKey = process.env.VALUYA_PRIVATE_KEY
+        let body: AllowlistAddRequest
 
-      let wallet_address = ""
-      if (walletAddressEnv && walletAddressEnv.trim() !== "") {
-        wallet_address = walletAddressEnv.trim().toLowerCase()
-      } else {
-        if (!privateKey)
-          throw new Error(
-            "Missing VALUYA_ALLOWLIST_WALLET or VALUYA_PRIVATE_KEY",
-          )
-        const w = new Wallet(privateKey)
-        wallet_address = (await w.getAddress()).toLowerCase()
+        // Preferred: file input
+        if (opts.file) {
+          logStep(`Loading allowlist JSON: ${opts.file}`)
+          const json = await readJsonFile(String(opts.file))
+          body = json as AllowlistAddRequest
+        } else {
+          // Fallback: flags
+          if (!opts.principal)
+            throw new Error("Missing --principal (or use --file)")
+          if (!opts.wallet) throw new Error("Missing --wallet (or use --file)")
+
+          const [principal_subject_type, principal_subject_id] = String(
+            opts.principal,
+          ).split(":", 2)
+          if (!principal_subject_type || !principal_subject_id) {
+            throw new Error("--principal must be <type>:<id>")
+          }
+
+          body = {
+            principal_subject_type,
+            principal_subject_id,
+            wallet_address: String(opts.wallet),
+            plan: opts.plan ? String(opts.plan) : null,
+            resource_prefix: opts.resourcePrefix
+              ? String(opts.resourcePrefix)
+              : null,
+            max_amount_cents: opts.maxAmountCents
+              ? Number(opts.maxAmountCents)
+              : null,
+            expires_at: opts.expiresAt ? String(opts.expiresAt) : null,
+            status: (String(opts.status) as "active" | "disabled") ?? "active",
+          }
+        }
+
+        // Minimal normalization (agent/back-end also validate)
+        body.wallet_address = String(body.wallet_address).toLowerCase().trim()
+
+        logStep("Calling allowlistAdd()")
+
+        const res = await allowlistAdd({ cfg, body })
+
+        logOk("Allowlist entry created/updated")
+        console.log(chalk.gray(JSON.stringify(res, null, 2)))
+        process.exit(0)
+      } catch (err: any) {
+        logErr(err?.message ?? String(err))
+        if (err?.stack) console.error(chalk.gray(err.stack))
+        process.exit(1)
       }
-
-      if (!isAddress(wallet_address)) {
-        throw new Error(`Invalid wallet address: ${wallet_address}`)
-      }
-
-      const resource_prefix =
-        process.env.VALUYA_ALLOWLIST_RESOURCE_PREFIX ?? null
-      const plan = process.env.VALUYA_ALLOWLIST_PLAN ?? null
-
-      const max_amount_cents =
-        process.env.VALUYA_ALLOWLIST_MAX_AMOUNT_CENTS !== undefined
-          ? Number(process.env.VALUYA_ALLOWLIST_MAX_AMOUNT_CENTS)
-          : null
-
-      const expires_at = process.env.VALUYA_ALLOWLIST_EXPIRES_AT ?? null
-      const status =
-        (process.env.VALUYA_ALLOWLIST_STATUS as
-          | "active"
-          | "disabled"
-          | undefined) ?? "active"
-
-      console.log(chalk.cyan("→ Adding wallet to allowlist..."))
-
-      const out = await allowlistAdd({
-        cfg: { base, tenant_token },
-        body: {
-          principal_subject_type,
-          principal_subject_id,
-          wallet_address,
-          resource_prefix,
-          plan,
-          max_amount_cents: Number.isFinite(max_amount_cents as any)
-            ? max_amount_cents
-            : null,
-          expires_at,
-          status,
-          meta: null,
-        },
-      })
-
-      console.log(
-        chalk.green(`✔ Allowlist updated: ${JSON.stringify(out, null, 2)}`),
-      )
     })
 }

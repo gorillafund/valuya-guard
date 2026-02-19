@@ -1,65 +1,78 @@
-import type { Command } from "commander"
-import "dotenv/config"
-import { Wallet } from "ethers"
-import chalk from "chalk"
-import { createProductAsAgent } from "@valuya/agent"
+// packages/cli/src/commands/agentProductCreate.ts
 
-function required(name: string): string {
+import type { Command } from "commander"
+import fs from "node:fs/promises"
+import path from "node:path"
+import chalk from "chalk"
+import { JsonRpcProvider } from "ethers"
+import { createProductAsAgent } from "@valuya/agent"
+import { makeEthersSigner } from "@valuya/agent"
+
+function requiredEnv(name: string): string {
   const v = process.env[name]
   if (!v) throw new Error(`Missing required env var: ${name}`)
   return v
 }
 
+function logStep(msg: string) {
+  console.log(chalk.cyan(`→ ${msg}`))
+}
+
+function logOk(msg: string) {
+  console.log(chalk.green(`✔ ${msg}`))
+}
+
+function logErr(msg: string) {
+  console.error(chalk.red(`✖ ${msg}`))
+}
+
 export function cmdAgentProductCreate(program: Command) {
   program
     .command("agent:product:create")
-    .description("Create a Product as an allowlisted agent")
-    .action(async () => {
-      const base = required("VALUYA_BASE")
-      const tenant_token = required("VALUYA_TENANT_TOKEN")
-      const subject = required("VALUYA_SUBJECT")
-      const privateKey = required("VALUYA_PRIVATE_KEY")
+    .description("Create a product via agent challenge flow")
+    .requiredOption("--subject <type:id>", "Principal subject (e.g. user:123)")
+    .requiredOption("--file <path>", "Path to product.json")
+    .action(async (opts) => {
+      try {
+        logStep("Loading environment")
 
-      const [subjectType, subjectId] = subject.split(":")
+        const base = requiredEnv("VALUYA_BASE")
+        const tenant_token = requiredEnv("VALUYA_TENANT_TOKEN")
+        const pk = requiredEnv("VALUYA_PRIVATE_KEY")
+        const rpc = requiredEnv("VALUYA_RPC_URL")
 
-      const product = {
-        slug: process.env.PRODUCT_SLUG,
-        name: required("PRODUCT_NAME"),
-        description: process.env.PRODUCT_DESCRIPTION,
-        category: process.env.PRODUCT_CATEGORY,
-        tags: process.env.PRODUCT_TAGS
-          ? process.env.PRODUCT_TAGS.split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : undefined,
-        visibility: process.env.PRODUCT_VISIBILITY ?? "public",
-        status: process.env.PRODUCT_STATUS ?? "active",
-        currency: process.env.PRODUCT_CURRENCY ?? "EUR",
-        usage_unit: process.env.PRODUCT_USAGE_UNIT ?? "call",
-        usage_unit_label: process.env.PRODUCT_USAGE_UNIT_LABEL ?? "request",
-        gateway_resource: required("PRODUCT_GATEWAY_RESOURCE"),
-        gateway_resource_key: process.env.PRODUCT_GATEWAY_RESOURCE_KEY,
-        pricing: process.env.PRODUCT_PRICE_CENTS
-          ? {
-              type: "per_call",
-              amount_cents: Number(process.env.PRODUCT_PRICE_CENTS),
-            }
-          : undefined,
+        const [subjectType, subjectId] = String(opts.subject).split(":", 2)
+        if (!subjectType || !subjectId) {
+          throw new Error("--subject must be in format <type>:<id>")
+        }
+
+        logStep("Loading product JSON")
+
+        const filePath = path.resolve(process.cwd(), opts.file)
+        const raw = await fs.readFile(filePath, "utf8")
+        const product = JSON.parse(raw)
+
+        const provider = new JsonRpcProvider(rpc)
+        const signer = makeEthersSigner(pk, provider)
+
+        const cfg = { base, tenant_token }
+
+        logStep("Creating product via agent")
+
+        const result = await createProductAsAgent({
+          cfg,
+          principal: { type: subjectType, id: subjectId },
+          signer,
+          product,
+        })
+
+        logOk("Product created successfully 🎉")
+        console.log(chalk.gray(JSON.stringify(result, null, 2)))
+        process.exit(0)
+      } catch (err: any) {
+        logErr(err?.message ?? String(err))
+        if (err?.stack) console.error(chalk.gray(err.stack))
+        process.exit(1)
       }
-
-      const wallet = new Wallet(privateKey)
-
-      console.log(chalk.cyan("→ Creating product as agent..."))
-
-      const out = await createProductAsAgent({
-        cfg: { base, tenant_token },
-        principal: { type: subjectType, id: subjectId },
-        wallet,
-        product,
-      })
-
-      console.log(
-        chalk.green(`✔ Product created: ${JSON.stringify(out, null, 2)}`),
-      )
     })
 }

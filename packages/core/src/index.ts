@@ -1,10 +1,6 @@
-// packages/core/src/index.js
+// packages/core/src/v2/index.ts
 
-export * from "./types.js"
-export * from "./resource.js"
-export * from "./subject.js"
-export * from "./contracts/mandates.js"
-export * from "./contracts/entitlements.js"
-export * from "./contracts/checkout.js"
-export * from "./responses.js"
-export * from "./payment.js"
+export * from "./canon/index.js"
+export * from "./protocol/index.js"
+export * from "./crypto/index.js"
+export * from "./domain/index.js"

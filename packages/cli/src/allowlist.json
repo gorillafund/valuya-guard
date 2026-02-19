@@ -1,0 +1,9 @@
+{
+  "principal_subject_type": "user",
+  "principal_subject_id": "123",
+  "wallet_address": "0xabc123...",
+  "plan": "pro",
+  "resource_prefix": "wp:path:/premium/",
+  "max_amount_cents": 9900,
+  "status": "active"
+}

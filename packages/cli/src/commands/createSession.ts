@@ -1,28 +1,49 @@
 import type { Command } from "commander"
+import type { GuardRequired } from "@valuya/core"
 import { createCheckoutSession } from "@valuya/agent"
+
+function requiredOpt(v: any, name: string): string {
+  const s = String(v ?? "").trim()
+  if (!s) throw new Error(`Missing --${name}`)
+  return s
+}
 
 export function cmdCreateSession(program: Command) {
   program
-    .command("create-session")
-    .requiredOption("--base <url>")
-    .option("--tenant_token <token>", "Tenant token (Bearer token)")
-    .requiredOption("--plan <plan>")
-    .requiredOption("--resource <resource>")
-    .requiredOption("--subject <subject>", 'e.g. "anon:526"')
-    .option("--idempotency-key <key>")
+    .command("session:create")
+    .description("Create a checkout session for a subject/resource/plan")
+    .requiredOption("--subject <type:id>", "Subject, e.g. user:123")
+    .requiredOption("--resource <resource>", "Canonical resource")
+    .requiredOption("--plan <plan>", "Plan (opaque string)")
+    .option("--origin <origin>", "Optional origin")
+    .option("--quantity <n>", "Requested quantity", "1")
     .action(async (opts) => {
-      const [type, id] = String(opts.subject).split(":")
-      const res = await createCheckoutSession({
-        cfg: { base: opts.base, tenant_token: opts.tenant_token },
-        plan: opts.plan,
-        evaluated_plan: opts.plan,
-        resource: opts.resource,
+      const base = requiredOpt(program.opts().base, "base")
+      const tenant_token = requiredOpt(
+        program.opts().tenantToken,
+        "tenant-token",
+      )
+
+      const subjectRaw = requiredOpt(opts.subject, "subject")
+      const [type, id] = subjectRaw.split(":", 2)
+      if (!type || !id) throw new Error("--subject must be <type>:<id>")
+
+      const required: GuardRequired = {
+        type: "subscription",
+        plan: String(opts.plan),
+      }
+
+      const session = await createCheckoutSession({
+        cfg: { base, tenant_token },
         subject: { type, id },
-        required: { type: "subscription", plan: opts.plan },
-        idempotencyKey: opts.idempotencyKey,
-        success_url: "",
-        cancel_url: "",
+        principal: { type, id },
+        resource: String(opts.resource),
+        plan: String(opts.plan),
+        required,
+        origin: opts.origin ? String(opts.origin) : undefined,
+        quantity_requested: Number(opts.quantity ?? 1),
       })
-      console.log(JSON.stringify(res, null, 2))
+
+      console.log(JSON.stringify(session, null, 2))
     })
 }

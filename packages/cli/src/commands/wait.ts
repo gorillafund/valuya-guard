@@ -1,4 +1,4 @@
-import type { Command } from "commander"
+/*import type { Command } from "commander"
 import { waitForPaid } from "@valuya/agent"
 
 export function cmdWait(program: Command) {
@@ -18,4 +18,4 @@ export function cmdWait(program: Command) {
       console.log(JSON.stringify(res, null, 2))
       process.exit(res.status === "paid" ? 0 : 2)
     })
-}
+}*/

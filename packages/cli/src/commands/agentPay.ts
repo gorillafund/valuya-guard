@@ -1,220 +1,110 @@
+// src/commands/agentPay.ts
 import type { Command } from "commander"
+import { isValuyaApiError } from "@valuya/agent"
 import "dotenv/config"
 import chalk from "chalk"
-import { Wallet } from "ethers"
+import { JsonRpcProvider, Wallet } from "ethers"
 
-import {
-  createCheckoutSession,
-  signAgentProof,
-  submitAgentTx,
-  sendTransaction,
-  verifySession,
-} from "@valuya/agent"
+import { purchase } from "@valuya/agent"
+import type { GuardRequired } from "@valuya/core"
+import { sendErc20Transfer } from "../chain/sendErc20.js"
 
-function logStep(msg: string) {
-  console.log(chalk.cyan(`→ ${msg}`))
-}
-
-function logOk(msg: string) {
-  console.log(chalk.green(`✔ ${msg}`))
-}
-
-function logErr(msg: string) {
-  console.error(chalk.red(`✖ ${msg}`))
-}
-
-function required(name: string): string {
+function requiredEnv(name: string): string {
   const v = process.env[name]
   if (!v) throw new Error(`Missing required env var: ${name}`)
   return v
 }
 
-const ZERO_TX = "0x" + "0".repeat(64)
+function printError(err: any) {
+  if (isValuyaApiError(err)) {
+    console.error(chalk.red(`✖ ${err.message}`))
+    const d = err.details
+    console.error(chalk.gray(`  ${d.method} ${d.url}`))
+    if (d.code) console.error(chalk.gray(`  code: ${d.code}`))
+    if (d.requestId) console.error(chalk.gray(`  request_id: ${d.requestId}`))
+    if (d.body)
+      console.error(chalk.gray(`  body: ${JSON.stringify(d.body, null, 2)}`))
+    else if (d.rawText) console.error(chalk.gray(`  body: ${d.rawText}`))
+    return
+  }
+
+  console.error(chalk.red(`✖ ${err?.message ?? String(err)}`))
+  if (err?.stack) console.error(chalk.gray(err.stack))
+}
+
+function logStep(msg: string) {
+  console.log(chalk.cyan(`→ ${msg}`))
+}
+function logOk(msg: string) {
+  console.log(chalk.green(`✔ ${msg}`))
+}
+function logErr(msg: string) {
+  console.error(chalk.red(`✖ ${msg}`))
+}
 
 export function cmdAgentPay(program: Command) {
   program
     .command("agent:pay")
-    .description("Run full Valuya Guard agent payment flow")
+    .description(
+      "Create session, pay (if needed), submit proof, verify, mint mandate",
+    )
     .action(async () => {
       try {
-        // ─────────────────────────────────────────────
-        // 1) Load config
-        // ─────────────────────────────────────────────
         logStep("Loading environment")
 
-        const cfg = {
-          base: required("VALUYA_BASE"),
-          tenant_token: required("VALUYA_TENANT_TOKEN"),
+        const base = requiredEnv("VALUYA_BASE")
+        const tenant_token = requiredEnv("VALUYA_TENANT_TOKEN")
+
+        const subjectRaw = requiredEnv("VALUYA_SUBJECT") // "<type>:<id>"
+        const resource = requiredEnv("VALUYA_RESOURCE")
+        const plan = requiredEnv("VALUYA_PLAN")
+        const pk = requiredEnv("VALUYA_PRIVATE_KEY")
+
+        const rpc = requiredEnv("VALUYA_RPC_URL") // required for paid flows
+        const pollIntervalMs = Number(process.env.VALUYA_POLL_INTERVAL ?? 3000)
+        const pollTimeoutMs = Number(process.env.VALUYA_POLL_TIMEOUT ?? 60000)
+
+        const [subjectType, subjectId] = subjectRaw.split(":", 2)
+        if (!subjectType || !subjectId) {
+          throw new Error("VALUYA_SUBJECT must be <type>:<id>")
         }
 
-        const subject = required("VALUYA_SUBJECT")
-        const resource = required("VALUYA_RESOURCE")
-        const plan = required("VALUYA_PLAN")
-        const privateKey = required("VALUYA_PRIVATE_KEY")
+        const provider = new JsonRpcProvider(rpc)
+        const wallet = new Wallet(pk, provider)
 
-        const pollInterval = Number(process.env.VALUYA_POLL_INTERVAL ?? 3_000)
-        const pollTimeout = Number(process.env.VALUYA_POLL_TIMEOUT ?? 60_000)
+        const cfg = { base, tenant_token }
+        const required: GuardRequired = { type: "subscription", plan }
 
-        const [subjectType, subjectId] = subject.split(":")
+        logStep("Running purchase() flow")
 
-        // ─────────────────────────────────────────────
-        // 2) Create checkout session
-        // ─────────────────────────────────────────────
-        logStep("Creating checkout session")
-
-        const session = await createCheckoutSession({
+        const derivedWalletAddress = (await wallet.getAddress()).toLowerCase()
+        logStep(`Using wallet address: ${derivedWalletAddress}`)
+        const result = await purchase({
           cfg,
-          plan,
-          evaluated_plan: plan,
-          resource,
+          signer: wallet, // ✅ Wallet satisfies EvmSigner structurally
           subject: { type: subjectType, id: subjectId },
-          required: { type: "subscription", plan },
-        })
-
-        logOk(`Session created: ${session.session_id}`)
-
-        if (!session.payment) {
-          throw new Error("No payment instruction returned")
-        }
-
-        const isFree = session.payment.is_free
-        if (isFree && isFree === true) {
-          logOk(
-            "Free checkout session — skipping on-chain transaction & proof submit",
-          )
-
-          // Just verify/poll until mandate is minted (or session becomes paid/failed)
-          logStep("Verifying (free path)")
-
-          const startedAt = Date.now()
-          while (true) {
-            const res = await verifySession({
-              cfg,
-              sessionId: session.session_id,
-              wallet_address: (
-                await new Wallet(privateKey).getAddress()
-              ).toLowerCase(),
-            })
-
-            if (res.ok) {
-              logOk("Mandate minted 🎉")
-              console.log(chalk.gray(JSON.stringify(res, null, 2)))
-              process.exit(0)
+          resource,
+          plan,
+          required,
+          pollIntervalMs,
+          pollTimeoutMs,
+          sendTx: async (payment) => {
+            if (payment.method !== "onchain") {
+              throw new Error(
+                `Unsupported payment method for agent tx: ${payment.method}`,
+              )
             }
 
-            if (res.state === "failed") throw new Error("Verification failed")
-            if (Date.now() - startedAt > pollTimeout)
-              throw new Error("Verification timeout reached")
-
-            await new Promise((r) => setTimeout(r, pollInterval))
-          }
-        }
-
-        // ─────────────────────────────────────────────
-        // 3) Execute on-chain payment (or free)
-        // ─────────────────────────────────────────────
-        let txHash: string
-
-        if (isFree) {
-          txHash = ZERO_TX
-        } else {
-          logStep("Sending on-chain transaction")
-
-          txHash = await sendTransaction({ payment: session.payment })
-          txHash = txHash.toLowerCase()
-
-          logOk(`Transaction sent: ${txHash}`)
-        }
-
-        // ─────────────────────────────────────────────
-        // 4) Sign agent proof
-        // ─────────────────────────────────────────────
-        logStep("Signing agent proof")
-
-        const wallet = new Wallet(privateKey)
-        const walletAddress = (await wallet.getAddress()).toLowerCase()
-
-        if (!session.server_time || !session.agent_proof_ttl_seconds) {
-          throw new Error(
-            "Missing server_time or agent_proof_ttl_seconds in session response",
-          )
-        }
-
-        const serverMs = Date.parse(session.server_time)
-        if (!Number.isFinite(serverMs)) {
-          throw new Error(`Invalid server_time: ${session.server_time}`)
-        }
-
-        // Keep ttl under server max (you set 540s on server)
-        const proofExpiresAt = new Date(
-          serverMs + Number(session.agent_proof_ttl_seconds) * 1000,
-        ).toISOString()
-
-        // Build proof (must match backend v2 message builder)
-        const proof = {
-          session_id: session.session_id,
-          tx_hash: txHash,
-          resource,
-          required_hash: session.required_hash,
-          chain_id: session.payment.chain_id,
-          token_address: session.payment.token_address,
-          to_address: session.payment.to_address,
-          amount_raw: session.payment.amount_raw,
-          expires_at: proofExpiresAt,
-        }
-
-        const signature = await signAgentProof({ wallet, proof })
-        logOk("Proof signed")
-
-        // ─────────────────────────────────────────────
-        // 5) Submit transaction proof (ONCE)
-        // ─────────────────────────────────────────────
-        logStep("Submitting transaction proof")
-
-        await submitAgentTx({
-          cfg,
-          sessionId: session.session_id,
-          tx_hash: txHash,
-          wallet_address: walletAddress,
-          signature,
-          proof,
+            // ✅ keep ERC20 sending in CLI
+            return sendErc20Transfer({ signer: wallet, payment })
+          },
         })
 
-        logOk("Transaction proof submitted")
-
-        // ─────────────────────────────────────────────
-        // 6) Verify until terminal state
-        // ─────────────────────────────────────────────
-        logStep("Verifying payment on-chain")
-
-        const startedAt = Date.now()
-
-        while (true) {
-          const res = await verifySession({
-            cfg,
-            sessionId: session.session_id,
-            wallet_address: walletAddress,
-          })
-
-          if (res.ok) {
-            logOk("Payment verified & mandate minted 🎉")
-            console.log(chalk.gray(JSON.stringify(res, null, 2)))
-            process.exit(0)
-          }
-
-          if (res.state === "failed") {
-            throw new Error("Payment verification failed")
-          }
-
-          if (Date.now() - startedAt > pollTimeout) {
-            throw new Error("Verification timeout reached")
-          }
-
-          await new Promise((r) => setTimeout(r, pollInterval))
-        }
+        logOk("Mandate minted 🎉")
+        console.log(chalk.gray(JSON.stringify(result.verify, null, 2)))
+        process.exit(0)
       } catch (err: any) {
-        logErr(err?.message ?? String(err))
-        if (err?.stack) console.error(chalk.gray(err.stack))
+        printError(err)
         process.exit(1)
       }
     })

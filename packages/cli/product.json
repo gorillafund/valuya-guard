@@ -1,0 +1,11 @@
+{
+  "name": "Pro Plan",
+  "description": "Access to premium API",
+  "pricing": {
+    "type": "subscription",
+    "plan": "pro",
+    "unit_price_cents": 1000,
+    "currency": "EUR"
+  },
+  "resources": ["http:route:GET:/api/v1/pro-data"]
+}

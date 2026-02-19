@@ -3,25 +3,29 @@ import { Command } from "commander"
 import { cmdCreateSession } from "./commands/createSession.js"
 import { cmdSignProof } from "./commands/signProof.js"
 import { cmdSubmitTx } from "./commands/submitTx.js"
-import { cmdWait } from "./commands/wait.js"
 import { cmdAgentPay } from "./commands/agentPay.js"
 import { cmdAgentProductCreate } from "./commands/createProduct.js"
-import { cmdAgentAddAllowlist } from "./commands/allowlistAdd.js"
+import { cmdAgentAllowlistAdd } from "./commands/allowlistAdd.js"
 import { cmdAgentProductsList } from "./commands/listProducts.js"
+
 const program = new Command()
 
-program.name("valuya").description("Valuya Guard agent CLI").version("0.1.0")
+program
+  .name("valuya")
+  .description("Valuya Guard CLI")
+  .option("--base <url>", "API base URL", process.env.VALUYA_BASE)
+  .option(
+    "--tenant-token <token>",
+    "Tenant token",
+    process.env.VALUYA_TENANT_TOKEN,
+  )
 
 cmdCreateSession(program)
 cmdSignProof(program)
 cmdSubmitTx(program)
-cmdWait(program)
 cmdAgentPay(program)
 cmdAgentProductCreate(program)
-cmdAgentAddAllowlist(program)
+cmdAgentAllowlistAdd(program)
 cmdAgentProductsList(program)
 
-program.parseAsync(process.argv).catch((e) => {
-  console.error(String(e.message ?? e))
-  process.exit(1)
-})
+program.parseAsync(process.argv)
