@@ -13,7 +13,6 @@ export type MandateV2 = {
 
   subject: { type: string; id: string }
 
-  // ✅ anchor key
   resource: AnchorResourceKey
 
   created_at: number // ms since epoch

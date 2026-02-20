@@ -26,7 +26,7 @@ export async function purchase(args: {
   cfg: AgentConfig
   signer: EvmSigner
   subject: { type: string; id: string }
-  principal?: { type: string; id: string } // NEW // optional, defaults to subject if not provided
+  principal?: { type: string; id: string } // optional, defaults to subject if not provided
   resource: string
   plan: string
   required: GuardRequired

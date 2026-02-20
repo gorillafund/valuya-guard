@@ -21,7 +21,7 @@ export async function sha256Hex(
   }
 
   const u8 = utf8ToBytes(input)
-  const ab = toArrayBuffer(u8) // ✅ always ArrayBuffer
+  const ab = toArrayBuffer(u8)
   const digest = await subtle.digest("SHA-256", ab)
   return bytesToHex(digest)
 }

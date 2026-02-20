@@ -5,7 +5,6 @@ import { cmdStart } from "./commands/start.js"
 import { cmdPremium } from "./commands/premium.js"
 import { cmdStatus } from "./commands/status.js"
 
-// ✅ this fixes: "Cannot find name 'Update'" and makes return type portable
 export function buildBot(cfg: BotConfig): Telegraf<Context<Update>> {
   const bot = new Telegraf<Context<Update>>(cfg.telegramToken)
 

@@ -9,7 +9,7 @@ export type PaymentInstruction =
       to_address: string
       amount_raw: string
       decimals: number
-      token_address: string // ✅ required in v2 (agent proof binds it)
+      token_address: string
       is_free?: false
     }
   | {

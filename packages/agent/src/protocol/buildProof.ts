@@ -19,9 +19,6 @@ export function buildAgentPaymentProofFromSession(args: {
   const payment = session.payment
   if (!payment) throw new Error("session_missing_payment")
   if (payment.method !== "onchain") {
-    // For free path, backend still expects routing fields in proof? In your controller it validates them.
-    // If you truly want free to skip submitTx, you already handle that in backend verify free path.
-    // But your submitTx currently *validates proof routing fields* even for free, so we keep it strict:
     throw new Error(`session_payment_not_onchain:${payment.method}`)
   }
 
@@ -31,8 +28,6 @@ export function buildAgentPaymentProofFromSession(args: {
   return {
     session_id: session.session_id,
     tx_hash: tx_hash.toLowerCase(),
-
-    // IMPORTANT: Laravel expects anchor_resource (not resource)
     anchor_resource: session.anchor_resource,
     required_hash: session.required_hash,
 

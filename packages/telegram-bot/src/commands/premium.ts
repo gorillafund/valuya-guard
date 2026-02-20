@@ -4,7 +4,6 @@ import type { BotConfig } from "../config.js"
 import { telegramSubject } from "../subject.js"
 import { ensureAccess } from "../valuya.js"
 
-// ✅ explicit annotation avoids non-portable inferred types
 export async function cmdPremium(
   ctx: Context<Update>,
   cfg: BotConfig,

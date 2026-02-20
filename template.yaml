@@ -31,7 +31,7 @@ Resources:
       Environment:
         Variables:
           VALUYA_BASE: "https://pay.gorilla.build"
-          VALUYA_SITE_TOKEN: "wp_site_1_oCBDm9Ps6e02s1W3CTcflN0S1BhusWpScMSaGI1j5U08ajH6"
+          VALUYA_SITE_TOKEN: ""
           VALUYA_RESOURCE: "wp:path:/protected/"
           VALUYA_PLAN: "pro"
           VALUYA_CURRENCY: "EUR"

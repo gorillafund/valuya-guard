@@ -7,7 +7,6 @@ export type CheckoutSessionResponse = {
   expires_at?: string
 }
 
-// ✅ Agent needs strict fields to build proof deterministically
 export type AgentCheckoutSessionResponseV2 = CheckoutSessionResponse & {
   anchor_resource: AnchorResourceKey
   required_hash: string

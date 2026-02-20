@@ -4,7 +4,7 @@ import { JsonRpcProvider } from "ethers"
 
 import {
   makeEthersSigner,
-  getCheckoutSession, // you must have this in @valuya/agent; if not, use createCheckoutSession response or add show wrapper
+  getCheckoutSession,
   buildAgentPaymentProofFromSession,
   signAgentPaymentProofV2,
 } from "@valuya/agent"

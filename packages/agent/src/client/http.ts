@@ -32,7 +32,6 @@ export async function apiJson<T>(args: {
   }
 
   if (!res.ok) {
-    // ✅ throw rich typed error
     throw await buildApiError({
       res,
       method: args.method,

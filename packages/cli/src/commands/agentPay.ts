@@ -60,7 +60,7 @@ export function cmdAgentPay(program: Command) {
         const plan = requiredEnv("VALUYA_PLAN")
         const pk = requiredEnv("VALUYA_PRIVATE_KEY")
 
-        const rpc = requiredEnv("VALUYA_RPC_URL") // required for paid flows
+        const rpc = requiredEnv("VALUYA_RPC_URL")
         const pollIntervalMs = Number(process.env.VALUYA_POLL_INTERVAL ?? 3000)
         const pollTimeoutMs = Number(process.env.VALUYA_POLL_TIMEOUT ?? 60000)
 
@@ -81,7 +81,7 @@ export function cmdAgentPay(program: Command) {
         logStep(`Using wallet address: ${derivedWalletAddress}`)
         const result = await purchase({
           cfg,
-          signer: wallet, // ✅ Wallet satisfies EvmSigner structurally
+          signer: wallet,
           subject: { type: subjectType, id: subjectId },
           resource,
           plan,
@@ -95,7 +95,6 @@ export function cmdAgentPay(program: Command) {
               )
             }
 
-            // ✅ keep ERC20 sending in CLI
             return sendErc20Transfer({ signer: wallet, payment })
           },
         })

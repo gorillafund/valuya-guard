@@ -2,7 +2,7 @@
 import type { AgentConfig } from "../types.js"
 import type { EvmSigner } from "../utils/evm.js"
 import { stableJson, sha256HexUtf8 } from "../crypto/index.js"
-import { createAgentChallenge } from "./challenges.js" // ✅ reuse
+import { createAgentChallenge } from "./challenges.js"
 
 export type AgentChallengeResponse = {
   ok?: boolean
@@ -21,7 +21,7 @@ export async function createProductAsAgent(args: {
   const canonical = stableJson(args.product)
   const request_sha256 = sha256HexUtf8(canonical)
 
-  // ✅ call shared challenge API wrapper
+  // call shared challenge API wrapper
   const ch = (await createAgentChallenge({
     cfg: args.cfg,
     payload: {
