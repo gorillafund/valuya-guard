@@ -67,3 +67,10 @@ Most server adapters support:
 
 - [Agent protocol RFC](RFC_AGENT_CLIENT_PROTOCOL_V1.md)
 - [Product authoring RFC](RFC_AGENT_PRODUCT_AUTHORING_API.md)
+
+## Publishing
+
+- JavaScript packages (npm): `pnpm publish:next`
+- JavaScript dry run: `pnpm publish:next:dry`
+- Python packages (PyPI): `pnpm publish:python`
+- Python dry run: `pnpm publish:python:dry`

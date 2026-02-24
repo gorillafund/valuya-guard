@@ -57,11 +57,21 @@ publish_pkg() {
 # Dependency order matters:
 publish_pkg "@valuya/core"
 publish_pkg "@valuya/agent"
+publish_pkg "@valuya/cloudflare-workers"
+publish_pkg "@valuya/fastly-compute"
+publish_pkg "@valuya/vercel-edge"
+publish_pkg "@valuya/client-js"
+publish_pkg "@valuya/node-express"
+publish_pkg "@valuya/node-koa"
+publish_pkg "@valuya/nextjs"
+publish_pkg "@valuya/nestjs"
+publish_pkg "@valuya/hono"
 publish_pkg "@valuya/aws-lambda-node"
+publish_pkg "@valuya/kubernetes"
+publish_pkg "@valuya/nginx-auth-request"
 publish_pkg "@valuya/cli"
 
 echo "Done."
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "No packages were actually published (dry run)."
 fi
-
