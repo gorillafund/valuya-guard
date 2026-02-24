@@ -8,6 +8,7 @@ import { JsonRpcProvider } from "ethers"
 import { createProductAsAgent } from "@valuya/agent"
 import { makeEthersSigner } from "@valuya/agent"
 import { whoami } from "@valuya/agent"
+import { prepareProductForCreate } from "@valuya/agent"
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -35,6 +36,10 @@ export function cmdAgentProductCreate(program: Command) {
     )
     .option("--subject <type:id>", "Principal subject override (e.g. user:123)")
     .requiredOption("--file <path>", "Path to product.json")
+    .option(
+      "--prepare",
+      "Call backend product prepare endpoint first to get deterministic payload",
+    )
     .action(async (opts) => {
       try {
         logStep("Loading environment")
@@ -48,7 +53,7 @@ export function cmdAgentProductCreate(program: Command) {
 
         const filePath = path.resolve(process.cwd(), opts.file)
         const raw = await fs.readFile(filePath, "utf8")
-        const product = JSON.parse(raw)
+        const productInput = JSON.parse(raw)
 
         const provider = new JsonRpcProvider(rpc)
         const signer = makeEthersSigner(pk, provider)
@@ -73,6 +78,24 @@ export function cmdAgentProductCreate(program: Command) {
           }
           principal = { type: String(s.type), id: String(s.id) }
           logStep(`Resolved principal: ${principal.type}:${principal.id}`)
+        }
+
+        let product = productInput
+        if (opts.prepare) {
+          logStep("Preparing product payload via backend (deterministic resource)")
+          const prepared = await prepareProductForCreate({
+            cfg,
+            payload: productInput,
+          })
+          if (!prepared?.product) {
+            throw new Error(
+              `product_prepare_failed:${JSON.stringify(prepared).slice(0, 500)}`,
+            )
+          }
+          product = prepared.product
+          if (prepared.resource) {
+            logStep(`Prepared resource: ${prepared.resource}`)
+          }
         }
 
         logStep("Creating product via agent")

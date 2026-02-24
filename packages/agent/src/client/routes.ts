@@ -19,6 +19,9 @@ export const ROUTES = {
   agentProductsCreate: "/api/v2/agent/products",
   agentProductsList: "/api/v2/agent/products",
   agentProductsResolve: "/api/v2/agent/products/resolve",
+  agentProductsTypes: "/api/v2/agent/products/types",
+  agentProductsSchema: "/api/v2/agent/products/schema",
+  agentProductsPrepare: "/api/v2/agent/products/prepare",
 
   // Agent challenges
   agentChallengesCreate: "/api/v2/agent/challenges",
