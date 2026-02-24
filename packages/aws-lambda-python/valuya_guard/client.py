@@ -16,8 +16,9 @@ def entitlements(plan: str, resource: str, subject: Subject) -> Entitlements:
     url = f"{_base()}/api/v2/entitlements"
     headers = {
         "accept": "application/json",
+        "x-valuya-subject-id": f"{subject.type}:{subject.id}",
         "x-valuya-subject-type": subject.type,
-        "x-valuya-subject-id": subject.id,
+        "x-valuya-subject-id-raw": subject.id,
     }
     tok = _site_token()
     if tok:
@@ -40,8 +41,9 @@ def checkout_session(plan: str, resource: str, subject: Subject, required: dict,
     headers = {
         "accept": "application/json",
         "content-type": "application/json",
+        "x-valuya-subject-id": f"{subject.type}:{subject.id}",
         "x-valuya-subject-type": subject.type,
-        "x-valuya-subject-id": subject.id,
+        "x-valuya-subject-id-raw": subject.id,
     }
     tok = _site_token()
     if tok:
@@ -49,6 +51,7 @@ def checkout_session(plan: str, resource: str, subject: Subject, required: dict,
 
     body = {
         "plan": plan,
+        "evaluated_plan": plan,
         "resource": resource,
         "subject": {"type": subject.type, "id": subject.id},
         "required": required,

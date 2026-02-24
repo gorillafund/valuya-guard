@@ -3,12 +3,12 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "valuya-guard"
+name = "valuya-fastapi"
 version = "0.2.0b1"
-description = "Valuya Guard for AWS Lambda (Python)"
+description = "Valuya Guard adapter for FastAPI"
 requires-python = ">=3.10"
-dependencies = ["requests>=2.31.0"]
+dependencies = ["requests>=2.31.0", "fastapi>=0.110.0"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["valuya_guard*"]
+include = ["valuya_fastapi*"]

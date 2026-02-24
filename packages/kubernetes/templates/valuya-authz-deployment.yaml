@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valuya-authz
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: valuya-authz
+  template:
+    metadata:
+      labels:
+        app: valuya-authz
+    spec:
+      containers:
+        - name: authz
+          image: ghcr.io/valuya/guard-adapter:latest
+          env:
+            - name: VALUYA_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: valuya-secrets
+                  key: base
+            - name: VALUYA_TENANT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: valuya-secrets
+                  key: tenant_token

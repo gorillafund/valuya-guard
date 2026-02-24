@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <body>
+    <button id="run">Call premium endpoint</button>
+    <script type="module">
+      import { fetchWithValuya } from "@valuya/client-js"
+      document.getElementById("run").onclick = async () => {
+        const res = await fetchWithValuya("/premium")
+        if (!res.ok && res.status === 402) {
+          window.location.href = res.payment.payment_url
+          return
+        }
+        console.log(res)
+      }
+    </script>
+  </body>
+</html>
