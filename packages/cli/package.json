@@ -1,6 +1,6 @@
 {
   "name": "@valuya/cli",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,8 +8,8 @@
     "valuya": "dist/bin.js"
   },
   "dependencies": {
-    "@valuya/agent": "file:../agent",
-    "@valuya/core": "file:../core",
+    "@valuya/agent": "workspace:^",
+    "@valuya/core": "workspace:^",
     "commander": "^12.1.0",
     "ethers": "^6.13.0",
     "dotenv": "^16.4.5",
@@ -19,5 +19,9 @@
     "build": "tsc -p tsconfig.json",
     "test": "pnpm build && node --test dist/tests/*.test.js",
     "prepublishOnly": "pnpm build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
   }
 }

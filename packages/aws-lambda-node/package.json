@@ -1,16 +1,20 @@
 {
   "name": "@valuya/aws-lambda-node",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@valuya/core": "file:../core"
+    "@valuya/core": "workspace:^"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^25.0.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
   }
 }

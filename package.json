@@ -1,6 +1,6 @@
 {
   "name": "valuya-guard",
-  "private": false,
+  "private": true,
   "workspaces": [
     "packages/*",
     "examples/*"
@@ -9,4 +9,3 @@
     "typescript": "^5.6.0"
   }
 }
-

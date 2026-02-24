@@ -1,6 +1,6 @@
 {
   "name": "@valuya/agent",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,9 +8,13 @@
     "chalk": "^5.6.2",
     "dotenv": "^16.6.1",
     "ethers": "^6.13.0",
-    "@valuya/core": "file:../core"
+    "@valuya/core": "workspace:^"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
   }
 }
