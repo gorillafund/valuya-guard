@@ -9,6 +9,11 @@ import {
   purchase,
 } from "@valuya/agent"
 import { sendErc20Transfer } from "../chain/sendErc20.js"
+import { backendErrorHint } from "../lib/backendErrors.js"
+import {
+  executeInvokeV1,
+  resolveAccessPlan,
+} from "../lib/invokeV1.js"
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -39,6 +44,8 @@ function printError(err: any) {
     if (d.body)
       console.error(chalk.gray(`  body: ${JSON.stringify(d.body, null, 2)}`))
     else if (d.rawText) console.error(chalk.gray(`  body: ${d.rawText}`))
+    const hint = backendErrorHint(d.code)
+    if (hint) console.error(chalk.yellow(`  hint: ${hint}`))
     return
   }
 
@@ -148,58 +155,39 @@ async function executeResolvedAccess(args: {
   opts: any
 }): Promise<void> {
   const { ctx, sessionId, opts } = args
-  const auth = opts.resourceAuth
-    ? String(opts.resourceAuth).trim()
-    : optionalEnv("VALUYA_RESOURCE_AUTH")
+  const plan = resolveAccessPlan({
+    invoke: ctx.resolved.access?.invoke,
+    visitUrl: ctx.resolved.access?.visit_url,
+    overrideUrl: opts.resourceUrl ? String(opts.resourceUrl) : undefined,
+  })
 
-  const invoke = ctx.resolved.access?.invoke
-  if (invoke?.url) {
-    const method = String(invoke.method || opts.method || "POST").toUpperCase()
-    logStep(`Invoking protected endpoint (${method}): ${invoke.url}`)
-
-    const headers: Record<string, string> = {
-      Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
-      "X-Valuya-Subject-Id": `${ctx.subject.type}:${ctx.subject.id}`,
-      "X-Valuya-Session-Id": sessionId,
-      ...(invoke.headers ?? {}),
-    }
-    if (auth && !headers.Authorization) headers.Authorization = `Bearer ${auth}`
-    if (invoke.body !== undefined && !headers["Content-Type"]) {
-      headers["Content-Type"] = "application/json"
-    }
-
-    const body =
-      invoke.body === undefined
-        ? undefined
-        : typeof invoke.body === "string"
-          ? invoke.body
-          : JSON.stringify(invoke.body)
-
-    const resp = await fetch(String(invoke.url), { method, headers, body })
-    const txt = await resp.text()
-    const payload = parseJsonOrText(txt)
-    if (!resp.ok) {
-      throw new Error(
-        `resource_invoke_failed:${resp.status}:${typeof payload === "string" ? payload.slice(0, 500) : JSON.stringify(payload).slice(0, 500)}`,
-      )
-    }
-    logOk(`Resource invoke succeeded (${resp.status})`)
-    console.log(JSON.stringify(payload, null, 2))
+  if (plan.kind === "invoke") {
+    logStep(`Invoking protected endpoint (${plan.invoke.method}): ${plan.invoke.url}`)
+    const result = await executeInvokeV1({
+      invoke: plan.invoke,
+    })
+    logOk(`Resource invoke succeeded (${result.status})`)
+    console.log(JSON.stringify({
+      status: result.status,
+      body: result.body,
+      latency_ms: result.latency_ms,
+      retry_count: result.retry_count,
+      session_id: sessionId,
+    }, null, 2))
     return
   }
 
-  const resourceUrl =
-    (opts.resourceUrl ? String(opts.resourceUrl).trim() : "") ||
-    String(ctx.resolved.access?.visit_url ?? "").trim()
-
-  if (!resourceUrl) {
+  if (plan.kind === "none") {
     logStep(
       "No invoke payload or visit_url provided/resolved. Use --resource-url to perform visit step.",
     )
     return
   }
 
-  logStep(`Calling protected resource: ${resourceUrl}`)
+  const auth = opts.resourceAuth
+    ? String(opts.resourceAuth).trim()
+    : optionalEnv("VALUYA_RESOURCE_AUTH")
+  logStep(`Calling protected resource: ${plan.url}`)
   const method = String(opts.method || "GET").toUpperCase()
   const headers: Record<string, string> = {
     Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
@@ -208,7 +196,7 @@ async function executeResolvedAccess(args: {
   }
   if (auth) headers.Authorization = `Bearer ${auth}`
 
-  const resp = await fetch(resourceUrl, { method, headers })
+  const resp = await fetch(plan.url, { method, headers })
   const txt = await resp.text()
   const body = parseJsonOrText(txt)
 

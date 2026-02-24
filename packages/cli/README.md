@@ -10,6 +10,34 @@ This CLI is meant to be used by:
 
 ---
 
+## Backend-driven Invoke v1 Flow
+
+For product access execution, the CLI now prefers backend-provided invoke contracts.
+
+When `agent:buy` resolves a product and receives:
+
+```json
+{
+  "access": {
+    "invoke": {
+      "version": "1",
+      "method": "POST",
+      "url": "https://...",
+      "headers": { "content-type": "application/json" },
+      "body": { "..." : "..." },
+      "timeout_ms": 15000,
+      "retry_policy": { "max_attempts": 2, "backoff_ms": [300, 1200] }
+    }
+  }
+}
+```
+
+the CLI executes that request as-is (method/url/headers/body), respecting `timeout_ms` and `retry_policy`.
+
+If no `access.invoke` is present, CLI falls back to `visit_url` / `--resource-url` behavior.
+
+---
+
 ## Commands overview
 
 ### High-level “do it all” purchase flow

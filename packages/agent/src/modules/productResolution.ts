@@ -10,6 +10,19 @@ export type ProductResolveInput = {
   external_id?: string
 }
 
+export type AccessInvokeV1 = {
+  version: "1"
+  method: "POST" | "GET" | "PUT" | "PATCH" | "DELETE"
+  url: string
+  headers?: Record<string, string>
+  body?: unknown
+  timeout_ms?: number
+  retry_policy?: {
+    max_attempts: number
+    backoff_ms: number[]
+  }
+}
+
 export type ProductResolveResponse = {
   ok?: boolean
   product?: {
@@ -20,13 +33,7 @@ export type ProductResolveResponse = {
   access?: {
     resource?: string | null
     visit_url?: string | null
-    invoke?: {
-      version?: string | number
-      method?: string
-      url?: string
-      headers?: Record<string, string>
-      body?: any
-    } | null
+    invoke?: AccessInvokeV1 | null
     plan?: string | null
     required?: GuardRequired | null
     quantity_default?: number | null
