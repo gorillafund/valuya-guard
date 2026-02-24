@@ -20,6 +20,13 @@ export type ProductResolveResponse = {
   access?: {
     resource?: string | null
     visit_url?: string | null
+    invoke?: {
+      version?: string | number
+      method?: string
+      url?: string
+      headers?: Record<string, string>
+      body?: any
+    } | null
     plan?: string | null
     required?: GuardRequired | null
     quantity_default?: number | null

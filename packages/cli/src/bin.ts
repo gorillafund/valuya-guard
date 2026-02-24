@@ -13,6 +13,7 @@ import { cmdAgentBuy } from "./commands/buyProduct.js"
 import { cmdAgentProductTypes } from "./commands/productTypes.js"
 import { cmdAgentProductSchema } from "./commands/productSchema.js"
 import { cmdAgentProductPrepare } from "./commands/productPrepare.js"
+import { cmdAgentDryRun } from "./commands/dryRun.js"
 
 const program = new Command()
 
@@ -39,5 +40,6 @@ cmdAgentBuy(program)
 cmdAgentProductTypes(program)
 cmdAgentProductSchema(program)
 cmdAgentProductPrepare(program)
+cmdAgentDryRun(program)
 
 program.parseAsync(process.argv)

@@ -54,6 +54,174 @@ function parseJsonOrText(txt: string): any {
   }
 }
 
+function levenshtein(a: string, b: string): number {
+  const aa = a.toLowerCase()
+  const bb = b.toLowerCase()
+  const dp = Array.from({ length: aa.length + 1 }, () =>
+    new Array<number>(bb.length + 1).fill(0),
+  )
+  for (let i = 0; i <= aa.length; i++) dp[i][0] = i
+  for (let j = 0; j <= bb.length; j++) dp[0][j] = j
+  for (let i = 1; i <= aa.length; i++) {
+    for (let j = 1; j <= bb.length; j++) {
+      const cost = aa[i - 1] === bb[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost,
+      )
+    }
+  }
+  return dp[aa.length][bb.length]
+}
+
+async function fetchProductSuggestions(args: {
+  base: string
+  tenant_token: string
+  query: string
+}): Promise<string[]> {
+  const base = args.base.replace(/\/+$/, "")
+  const url = new URL(`${base}/api/v2/agent/products`)
+  url.searchParams.set("q", args.query)
+  url.searchParams.set("limit", "10")
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${args.tenant_token}`,
+    },
+  })
+  if (!res.ok) return []
+  const body = await res.json().catch(() => ({}))
+  const rows = Array.isArray(body?.data)
+    ? body.data
+    : Array.isArray(body?.items)
+      ? body.items
+      : Array.isArray(body)
+        ? body
+        : []
+
+  const slugs = rows
+    .map((x: any) => String(x?.slug ?? "").trim())
+    .filter((x: string) => !!x)
+
+  return Array.from(new Set(slugs))
+}
+
+function extractRefQuery(ref: string): string {
+  if (ref.startsWith("slug:")) return ref.slice(5)
+  if (ref.startsWith("id:")) return ref.slice(3)
+  if (ref.startsWith("external:")) return ref.slice(9)
+  return ref
+}
+
+async function handleResolveError(args: {
+  err: any
+  base: string
+  tenant_token: string
+  productRef: string
+}): Promise<never> {
+  const { err, base, tenant_token, productRef } = args
+  if (isValuyaApiError(err) && err.details.code === "product_not_found") {
+    const q = extractRefQuery(productRef).trim()
+    const suggestions = await fetchProductSuggestions({
+      base,
+      tenant_token,
+      query: q,
+    })
+    if (suggestions.length > 0) {
+      const ranked = suggestions
+        .map((s) => ({ s, score: levenshtein(q, s) }))
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 3)
+        .map((x) => `slug:${x.s}`)
+      err.message = `${err.message}\n  suggestions: ${ranked.join(", ")}`
+    }
+  }
+  throw err
+}
+
+async function executeResolvedAccess(args: {
+  ctx: Awaited<ReturnType<typeof resolvePurchaseContext>>
+  sessionId: string
+  opts: any
+}): Promise<void> {
+  const { ctx, sessionId, opts } = args
+  const auth = opts.resourceAuth
+    ? String(opts.resourceAuth).trim()
+    : optionalEnv("VALUYA_RESOURCE_AUTH")
+
+  const invoke = ctx.resolved.access?.invoke
+  if (invoke?.url) {
+    const method = String(invoke.method || opts.method || "POST").toUpperCase()
+    logStep(`Invoking protected endpoint (${method}): ${invoke.url}`)
+
+    const headers: Record<string, string> = {
+      Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+      "X-Valuya-Subject-Id": `${ctx.subject.type}:${ctx.subject.id}`,
+      "X-Valuya-Session-Id": sessionId,
+      ...(invoke.headers ?? {}),
+    }
+    if (auth && !headers.Authorization) headers.Authorization = `Bearer ${auth}`
+    if (invoke.body !== undefined && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json"
+    }
+
+    const body =
+      invoke.body === undefined
+        ? undefined
+        : typeof invoke.body === "string"
+          ? invoke.body
+          : JSON.stringify(invoke.body)
+
+    const resp = await fetch(String(invoke.url), { method, headers, body })
+    const txt = await resp.text()
+    const payload = parseJsonOrText(txt)
+    if (!resp.ok) {
+      throw new Error(
+        `resource_invoke_failed:${resp.status}:${typeof payload === "string" ? payload.slice(0, 500) : JSON.stringify(payload).slice(0, 500)}`,
+      )
+    }
+    logOk(`Resource invoke succeeded (${resp.status})`)
+    console.log(JSON.stringify(payload, null, 2))
+    return
+  }
+
+  const resourceUrl =
+    (opts.resourceUrl ? String(opts.resourceUrl).trim() : "") ||
+    String(ctx.resolved.access?.visit_url ?? "").trim()
+
+  if (!resourceUrl) {
+    logStep(
+      "No invoke payload or visit_url provided/resolved. Use --resource-url to perform visit step.",
+    )
+    return
+  }
+
+  logStep(`Calling protected resource: ${resourceUrl}`)
+  const method = String(opts.method || "GET").toUpperCase()
+  const headers: Record<string, string> = {
+    Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+    "X-Valuya-Subject-Id": `${ctx.subject.type}:${ctx.subject.id}`,
+    "X-Valuya-Session-Id": sessionId,
+  }
+  if (auth) headers.Authorization = `Bearer ${auth}`
+
+  const resp = await fetch(resourceUrl, { method, headers })
+  const txt = await resp.text()
+  const body = parseJsonOrText(txt)
+
+  if (!resp.ok) {
+    throw new Error(
+      `resource_call_failed:${resp.status}:${typeof body === "string" ? body.slice(0, 500) : JSON.stringify(body).slice(0, 500)}`,
+    )
+  }
+
+  logOk(`Resource call succeeded (${resp.status})`)
+  console.log(JSON.stringify(body, null, 2))
+}
+
 export function cmdAgentBuy(program: Command) {
   program
     .command("agent:buy")
@@ -89,7 +257,9 @@ export function cmdAgentBuy(program: Command) {
         const ctx = await resolvePurchaseContext({
           cfg,
           product: parseProductRef(productRef),
-        })
+        }).catch((err) =>
+          handleResolveError({ err, base, tenant_token, productRef }),
+        )
 
         logStep(
           `Resolved subject=${ctx.subject.type}:${ctx.subject.id} resource=${ctx.resource} plan=${ctx.plan}`,
@@ -123,47 +293,15 @@ export function cmdAgentBuy(program: Command) {
           return
         }
 
-        const resourceUrl =
-          (opts.resourceUrl ? String(opts.resourceUrl).trim() : "") ||
-          String(ctx.resolved.access?.visit_url ?? "").trim()
-
-        if (!resourceUrl) {
-          logStep(
-            "No resource URL provided/resolved. Use --resource-url to perform visit step.",
-          )
-          console.log(JSON.stringify(result.verify, null, 2))
-          return
-        }
-
-        logStep(`Calling protected resource: ${resourceUrl}`)
-        const method = String(opts.method || "GET").toUpperCase()
-        const auth = opts.resourceAuth
-          ? String(opts.resourceAuth).trim()
-          : optionalEnv("VALUYA_RESOURCE_AUTH")
-
-        const headers: Record<string, string> = {
-          Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
-          "X-Valuya-Subject-Id": `${ctx.subject.type}:${ctx.subject.id}`,
-          "X-Valuya-Session-Id": result.session.session_id,
-        }
-        if (auth) headers.Authorization = `Bearer ${auth}`
-
-        const resp = await fetch(resourceUrl, { method, headers })
-        const txt = await resp.text()
-        const body = parseJsonOrText(txt)
-
-        if (!resp.ok) {
-          throw new Error(
-            `resource_call_failed:${resp.status}:${typeof body === "string" ? body.slice(0, 500) : JSON.stringify(body).slice(0, 500)}`,
-          )
-        }
-
-        logOk(`Resource call succeeded (${resp.status})`)
-        console.log(JSON.stringify(body, null, 2))
+        await executeResolvedAccess({
+          ctx,
+          sessionId: result.session.session_id,
+          opts,
+        })
+        console.log(JSON.stringify(result.verify, null, 2))
       } catch (err: any) {
         printError(err)
         process.exit(1)
       }
     })
 }
-
