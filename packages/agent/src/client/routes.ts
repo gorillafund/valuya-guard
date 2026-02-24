@@ -18,7 +18,11 @@ export const ROUTES = {
   // Agent products
   agentProductsCreate: "/api/v2/agent/products",
   agentProductsList: "/api/v2/agent/products",
+  agentProductsResolve: "/api/v2/agent/products/resolve",
 
   // Agent challenges
   agentChallengesCreate: "/api/v2/agent/challenges",
+
+  // Agent identity/context
+  agentWhoami: "/api/v2/agent/whoami",
 } as const

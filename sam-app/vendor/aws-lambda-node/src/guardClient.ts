@@ -108,7 +108,7 @@ export async function createCheckoutSession(args: {
   return {
     session_id: json.session_id,
     expires_at: json.expires_at,
-    payment_url: json.payment_url ?? null,
+    payment_url: json.payment_url ?? "",
     payment: json.payment ?? null,
   }
 }

@@ -7,6 +7,7 @@ import chalk from "chalk"
 import { JsonRpcProvider } from "ethers"
 import { createProductAsAgent } from "@valuya/agent"
 import { makeEthersSigner } from "@valuya/agent"
+import { whoami } from "@valuya/agent"
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -29,8 +30,10 @@ function logErr(msg: string) {
 export function cmdAgentProductCreate(program: Command) {
   program
     .command("agent:product:create")
-    .description("Create a product via agent challenge flow")
-    .requiredOption("--subject <type:id>", "Principal subject (e.g. user:123)")
+    .description(
+      "Create a product via agent challenge flow (principal auto-resolved from token by default)",
+    )
+    .option("--subject <type:id>", "Principal subject override (e.g. user:123)")
     .requiredOption("--file <path>", "Path to product.json")
     .action(async (opts) => {
       try {
@@ -40,11 +43,6 @@ export function cmdAgentProductCreate(program: Command) {
         const tenant_token = requiredEnv("VALUYA_TENANT_TOKEN")
         const pk = requiredEnv("VALUYA_PRIVATE_KEY")
         const rpc = requiredEnv("VALUYA_RPC_URL")
-
-        const [subjectType, subjectId] = String(opts.subject).split(":", 2)
-        if (!subjectType || !subjectId) {
-          throw new Error("--subject must be in format <type>:<id>")
-        }
 
         logStep("Loading product JSON")
 
@@ -56,12 +54,32 @@ export function cmdAgentProductCreate(program: Command) {
         const signer = makeEthersSigner(pk, provider)
 
         const cfg = { base, tenant_token }
+        let principal: { type: string; id: string }
+
+        if (opts.subject) {
+          const [subjectType, subjectId] = String(opts.subject).split(":", 2)
+          if (!subjectType || !subjectId) {
+            throw new Error("--subject must be in format <type>:<id>")
+          }
+          principal = { type: subjectType, id: subjectId }
+        } else {
+          logStep("Resolving principal from whoami()")
+          const me = await whoami({ cfg })
+          const s = me.principal?.subject
+          if (!s?.type || !s?.id) {
+            throw new Error(
+              "principal_not_bound: token has no principal subject; pass --subject explicitly",
+            )
+          }
+          principal = { type: String(s.type), id: String(s.id) }
+          logStep(`Resolved principal: ${principal.type}:${principal.id}`)
+        }
 
         logStep("Creating product via agent")
 
         const result = await createProductAsAgent({
           cfg,
-          principal: { type: subjectType, id: subjectId },
+          principal,
           signer,
           product,
         })

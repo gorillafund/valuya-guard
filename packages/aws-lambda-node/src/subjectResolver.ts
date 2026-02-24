@@ -1,4 +1,4 @@
-import type { Subject } from "@valuya/core"
+import type { Subject } from "./types.js"
 
 export function defaultSubject(event: any): Subject {
   const headers = normalizeHeaders(event?.headers)

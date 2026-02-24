@@ -1,4 +1,7 @@
-import type { Subject } from "@valuya/core"
+export type Subject = {
+  type: "user" | "anon" | "agent" | "wallet" | "api_key"
+  id: string
+}
 
 export type LambdaLikeResponse = {
   statusCode: number

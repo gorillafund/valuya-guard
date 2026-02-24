@@ -1,5 +1,5 @@
 import type { GuardRequired } from "@valuya/core"
-import { paymentRequiredResponse, httpRouteResource } from "@valuya/core"
+import { paymentRequiredResponseV2 } from "@valuya/core"
 import { defaultSubject } from "./subjectResolver.js"
 import { fetchEntitlements, createCheckoutSession } from "./guardClient.js"
 import type { LambdaHandler, WithValuyaOptions } from "./types.js"
@@ -83,15 +83,15 @@ export function withValuya(
     }
 
     // Agent / API flow
-    const resp = paymentRequiredResponse({
+    const resp = paymentRequiredResponseV2({
       reason: (ent as any)?.reason || "payment_required",
       required,
-      evaluatedPlan,
-      resource: resource as any,
-      sessionId: session.session_id,
+      evaluated_plan: evaluatedPlan,
+      resource,
+      session_id: session.session_id,
 
       // IMPORTANT:
-      paymentUrl: session.payment_url ?? undefined,
+      payment_url: session.payment_url,
       payment: session.payment ?? undefined,
     })
 
@@ -136,12 +136,21 @@ function deriveHttpResource(event: any): string {
 
   if (!method || !path) return ""
 
-  // core helper preserves trailing slash and builds http:route:METHOD:/path
+  // Build canonical-like route key without depending on old core helper symbols.
   try {
     return httpRouteResource(String(method), String(path))
   } catch {
     return ""
   }
+}
+
+function httpRouteResource(method: string, path: string): string {
+  const m = method.trim().toUpperCase()
+  const p = String(path)
+  if (!m) throw new Error("HTTP method required")
+  if (!p) throw new Error("HTTP path required")
+  if (/\s/.test(p)) throw new Error(`Invalid HTTP path (contains whitespace): ${p}`)
+  return `http:route:${m}:${p}`
 }
 
 // Deterministic idempotency key (backend must enforce)

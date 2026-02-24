@@ -1,6 +1,10 @@
 // src/commands/agentPay.ts
 import type { Command } from "commander"
-import { isValuyaApiError } from "@valuya/agent"
+import {
+  isValuyaApiError,
+  parseProductRef,
+  resolvePurchaseContext,
+} from "@valuya/agent"
 import "dotenv/config"
 import chalk from "chalk"
 import { JsonRpcProvider, Wallet } from "ethers"
@@ -13,6 +17,17 @@ function requiredEnv(name: string): string {
   const v = process.env[name]
   if (!v) throw new Error(`Missing required env var: ${name}`)
   return v
+}
+
+function optionalEnv(name: string): string | undefined {
+  const v = process.env[name]
+  return v && String(v).trim() ? String(v).trim() : undefined
+}
+
+function parseSubjectRaw(subjectRaw: string): { type: string; id: string } {
+  const [type, id] = String(subjectRaw).split(":", 2)
+  if (!type || !id) throw new Error("VALUYA_SUBJECT must be <type>:<id>")
+  return { type, id }
 }
 
 function printError(err: any) {
@@ -48,32 +63,70 @@ export function cmdAgentPay(program: Command) {
     .description(
       "Create session, pay (if needed), submit proof, verify, mint mandate",
     )
-    .action(async () => {
+    .option(
+      "--product <ref>",
+      "Product ref (id, slug, id:<n>, slug:<slug>, external:<id>)",
+    )
+    .action(async (opts) => {
       try {
         logStep("Loading environment")
 
         const base = requiredEnv("VALUYA_BASE")
         const tenant_token = requiredEnv("VALUYA_TENANT_TOKEN")
 
-        const subjectRaw = requiredEnv("VALUYA_SUBJECT") // "<type>:<id>"
-        const resource = requiredEnv("VALUYA_RESOURCE")
-        const plan = requiredEnv("VALUYA_PLAN")
         const pk = requiredEnv("VALUYA_PRIVATE_KEY")
-
         const rpc = requiredEnv("VALUYA_RPC_URL")
+
+        const subjectRaw = optionalEnv("VALUYA_SUBJECT") // "<type>:<id>"
+        const resource = optionalEnv("VALUYA_RESOURCE")
+        const plan = optionalEnv("VALUYA_PLAN")
+        const productRef =
+          (opts?.product ? String(opts.product).trim() : "") ||
+          optionalEnv("VALUYA_PRODUCT")
+
         const pollIntervalMs = Number(process.env.VALUYA_POLL_INTERVAL ?? 3000)
         const pollTimeoutMs = Number(process.env.VALUYA_POLL_TIMEOUT ?? 60000)
-
-        const [subjectType, subjectId] = subjectRaw.split(":", 2)
-        if (!subjectType || !subjectId) {
-          throw new Error("VALUYA_SUBJECT must be <type>:<id>")
-        }
 
         const provider = new JsonRpcProvider(rpc)
         const wallet = new Wallet(pk, provider)
 
         const cfg = { base, tenant_token }
-        const required: GuardRequired = { type: "subscription", plan }
+        let required: GuardRequired
+        let subject: { type: string; id: string }
+        let principal: { type: string; id: string } | undefined
+        let resolvedResource: string
+        let resolvedPlan: string
+        let quantity_requested: number | undefined
+
+        const hasExplicit =
+          Boolean(subjectRaw && resource && plan)
+
+        if (hasExplicit) {
+          subject = parseSubjectRaw(String(subjectRaw))
+          resolvedResource = String(resource)
+          resolvedPlan = String(plan)
+          required = { type: "subscription", plan: resolvedPlan }
+        } else {
+          if (!productRef) {
+            throw new Error(
+              "Missing product context. Provide --product (or VALUYA_PRODUCT), or set VALUYA_SUBJECT + VALUYA_RESOURCE + VALUYA_PLAN.",
+            )
+          }
+          logStep(`Resolving context for product: ${productRef}`)
+          const ctx = await resolvePurchaseContext({
+            cfg,
+            product: parseProductRef(productRef),
+          })
+          subject = ctx.subject
+          principal = ctx.principal
+          resolvedResource = ctx.resource
+          resolvedPlan = ctx.plan
+          required = ctx.required
+          quantity_requested = ctx.quantity_requested
+          logStep(
+            `Resolved subject=${subject.type}:${subject.id}, resource=${resolvedResource}, plan=${resolvedPlan}`,
+          )
+        }
 
         logStep("Running purchase() flow")
 
@@ -82,10 +135,12 @@ export function cmdAgentPay(program: Command) {
         const result = await purchase({
           cfg,
           signer: wallet,
-          subject: { type: subjectType, id: subjectId },
-          resource,
-          plan,
+          subject,
+          principal,
+          resource: resolvedResource,
+          plan: resolvedPlan,
           required,
+          quantity_requested,
           pollIntervalMs,
           pollTimeoutMs,
           sendTx: async (payment) => {
