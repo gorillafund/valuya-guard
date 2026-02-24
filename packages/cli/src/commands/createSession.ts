@@ -18,9 +18,12 @@ export function cmdCreateSession(program: Command) {
     .option("--origin <origin>", "Optional origin")
     .option("--quantity <n>", "Requested quantity", "1")
     .action(async (opts) => {
-      const base = requiredOpt(program.opts().base, "base")
+      const base = requiredOpt(
+        program.opts().base ?? process.env.VALUYA_BASE,
+        "base",
+      )
       const tenant_token = requiredOpt(
-        program.opts().tenantToken,
+        program.opts().tenantToken ?? process.env.VALUYA_TENANT_TOKEN,
         "tenant-token",
       )
 

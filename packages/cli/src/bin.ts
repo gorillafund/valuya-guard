@@ -20,12 +20,8 @@ const program = new Command()
 program
   .name("valuya")
   .description("Valuya Guard CLI")
-  .option("--base <url>", "API base URL", process.env.VALUYA_BASE)
-  .option(
-    "--tenant-token <token>",
-    "Tenant token",
-    process.env.VALUYA_TENANT_TOKEN,
-  )
+  .option("--base <url>", "API base URL")
+  .option("--tenant-token <token>", "Tenant token")
 
 cmdCreateSession(program)
 cmdSignProof(program)
