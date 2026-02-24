@@ -16,6 +16,8 @@ This monorepo provides framework and runtime adapters that enforce:
 - `@valuya/aws-lambda-node`
 - `valuya-guard` (Python, AWS Lambda)
 - `valuya-fastapi`
+- `@valuya/telegram-bot`
+- `@valuya/discord-bot`
 - `@valuya/node-express`
 - `@valuya/node-koa`
 - `@valuya/cloudflare-workers`
@@ -35,6 +37,8 @@ This monorepo provides framework and runtime adapters that enforce:
 - [AWS Lambda (Node)](docs/aws-lambda.md)
 - [AWS Lambda (Python)](docs/aws-lambda-python.md)
 - [FastAPI](docs/fastapi.md)
+- [Telegram Bot](docs/telegram-bot.md)
+- [Discord Bot](docs/discord-bot.md)
 - [Node Express](docs/node-express.md)
 - [Node Koa](docs/node-koa.md)
 - [Cloudflare Workers](docs/cloudflare-workers.md)

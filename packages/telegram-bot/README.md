@@ -1,52 +1,99 @@
 # @valuya/telegram-bot
 
-Telegram Bot adapter for Valuya Guard v2 (Option A: one global resource for the whole bot).
+Telegram adapter for payment-gated bots with Valuya Guard.
 
-## What it does
+This package gives you a high-UX gate flow for commands:
 
-- Maps Telegram users to a stable Guard subject: `telegram:<telegramUserId>`
-- Checks `/api/v2/entitlements`
-- If inactive:
-  - creates a checkout session
-  - sends the on-chain payment via the agent wallet
-  - submits tx proof
-  - verifies and mints mandate
-- Replies in Telegram with success/failure
+1. Check entitlement (`/api/v2/entitlements`)
+2. If missing, create checkout (`/api/v2/checkout/sessions`)
+3. Return a ready payment prompt (text + Pay button)
+4. User pays and retries command (or `/status`)
 
-## Setup
-
-### 1) Env vars
-
-Create `.env` (or export env vars):
-
-- TELEGRAM_BOT_TOKEN=...
-- VALUYA_BASE=https://pay.gorilla.build
-- VALUYA*TENANT_TOKEN=tt*...
-- VALUYA_RESOURCE=telegram:bot:<resourceId>
-- VALUYA_PLAN=standard
-- VALUYA_CURRENCY=EUR
-- VALUYA_AMOUNT_CENTS=9900
-
-Agent wallet (pays on behalf of users):
-
-- VALUYA_PRIVATE_KEY=0x...
-- VALUYA_FROM_ADDRESS=0x...
-
-Optional:
-
-- VALUYA_POLL_INTERVAL_MS=3000
-- VALUYA_POLL_TIMEOUT_MS=90000
-
-### 2) Backend requirements
-
-- Product exists for (tenant_id + resource).
-- Subject type `telegram` is accepted consistently by your subject resolver and mandate checks.
-
-## Run (dev)
-
-From repo root:
+## Install
 
 ```bash
-pnpm -r install
-pnpm --filter @valuya/telegram-bot dev
+npm i @valuya/telegram-bot
 ```
+
+## Quick start
+
+```ts
+import { createTelegramGuard } from "@valuya/telegram-bot"
+
+const guard = createTelegramGuard({
+  base: process.env.VALUYA_BASE!,
+  tenantToken: process.env.VALUYA_TENANT_TOKEN!,
+  defaultPlan: "standard",
+  defaultResource: "telegram:bot:premium",
+})
+
+const decision = await guard.gate({ user: { id: 12345 } })
+if (decision.active) {
+  // allow premium action
+} else {
+  // send decision.prompt.text + decision.prompt.keyboard[0].url
+}
+```
+
+## Recommended UX flow
+
+- On premium command:
+  - call `guard.gate(...)`
+  - if active: execute command immediately
+  - if not active: send payment prompt with a direct button link
+- Add `/status` command:
+  - call `guard.status(...)`
+  - if active: confirm access is now enabled
+  - if not active: remind user to complete payment
+- Keep prompts short and actionable.
+
+## Subject strategy
+
+Default subject type is `telegram`, and subject id is `telegram_user_id`.
+
+Example wire subject:
+
+```json
+{ "type": "telegram", "id": "12345" }
+```
+
+You can override `subjectType` if your backend expects a different type.
+
+## API
+
+### `createTelegramGuard(options)`
+
+Options:
+- `base` (required)
+- `tenantToken` (required)
+- `defaultPlan` (optional, default `pro`)
+- `defaultResource` (optional)
+- `subjectType` (optional, default `telegram`)
+- `successUrl` / `cancelUrl` (optional)
+
+Returns:
+- `gate(input)`
+- `status(input)`
+
+### `gate(input)`
+
+Input:
+- `user.id` (required)
+- `resource` (optional if `defaultResource` is set)
+- `plan` (optional)
+
+Result:
+- active access: `{ active: true, ... }`
+- payment required: `{ active: false, paymentUrl, sessionId, prompt, ... }`
+
+### `status(input)`
+
+Checks current entitlement status only.
+
+## Production tips
+
+- Set deterministic resource keys (`telegram:bot:<feature>`).
+- Use one resource per premium capability.
+- Use typed backend product authoring (`prepare`) to avoid resource drift.
+- Add command cooldown/debounce to avoid repeated session creation spam.
+- Log `sessionId` in bot logs for support and observability.
