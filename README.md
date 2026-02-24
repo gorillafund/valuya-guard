@@ -18,6 +18,7 @@ This monorepo provides framework and runtime adapters that enforce:
 - `valuya-fastapi`
 - `@valuya/telegram-bot`
 - `@valuya/discord-bot`
+- `@valuya/agentokratia-signer`
 - `@valuya/node-express`
 - `@valuya/node-koa`
 - `@valuya/cloudflare-workers`
@@ -39,6 +40,7 @@ This monorepo provides framework and runtime adapters that enforce:
 - [FastAPI](docs/fastapi.md)
 - [Telegram Bot](docs/telegram-bot.md)
 - [Discord Bot](docs/discord-bot.md)
+- [Agentokratia Guardian](docs/agentokratia-guardian-integration.md)
 - [Node Express](docs/node-express.md)
 - [Node Koa](docs/node-koa.md)
 - [Cloudflare Workers](docs/cloudflare-workers.md)

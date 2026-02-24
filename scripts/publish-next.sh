@@ -57,6 +57,7 @@ publish_pkg() {
 # Dependency order matters:
 publish_pkg "@valuya/core"
 publish_pkg "@valuya/agent"
+publish_pkg "@valuya/agentokratia-signer"
 publish_pkg "@valuya/telegram-bot"
 publish_pkg "@valuya/discord-bot"
 publish_pkg "@valuya/cloudflare-workers"
