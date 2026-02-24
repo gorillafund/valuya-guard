@@ -21,8 +21,12 @@ This monorepo provides framework and runtime adapters that enforce:
 - `@valuya/cloudflare-workers`
 - `@valuya/vercel-edge`
 - `@valuya/fastly-compute`
+- `@valuya/nextjs`
+- `@valuya/nestjs`
+- `@valuya/hono`
 - `@valuya/client-js`
 - `github.com/valuya/go-middleware`
+- `valuya-django`
 - `@valuya/kubernetes`
 - `@valuya/nginx-auth-request`
 
@@ -36,8 +40,12 @@ This monorepo provides framework and runtime adapters that enforce:
 - [Cloudflare Workers](docs/cloudflare-workers.md)
 - [Vercel Edge](docs/vercel-edge.md)
 - [Fastly Compute](docs/fastly-compute.md)
+- [Next.js](docs/nextjs.md)
+- [NestJS](docs/nestjs.md)
+- [Hono](docs/hono.md)
 - [Client JS](docs/client-js.md)
 - [Go Middleware](docs/go-middleware.md)
+- [Django](docs/django.md)
 - [Kubernetes](docs/kubernetes.md)
 - [Nginx auth_request](docs/nginx-auth-request.md)
 
