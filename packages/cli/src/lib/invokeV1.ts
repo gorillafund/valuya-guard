@@ -2,7 +2,7 @@ export type InvokeHttpMethod = "POST" | "GET" | "PUT" | "PATCH" | "DELETE"
 
 export type InvokeRetryPolicy = {
   max_attempts: number
-  backoff_ms: number[]
+  backoff_ms: number[] | number
 }
 
 export type InvokeV1Spec = {
@@ -10,6 +10,7 @@ export type InvokeV1Spec = {
   method: InvokeHttpMethod
   url: string
   headers?: Record<string, string>
+  body_template?: unknown
   body?: unknown
   timeout_ms?: number
   retry_policy?: InvokeRetryPolicy
@@ -51,6 +52,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function normalizeBackoff(value: unknown): number[] {
+  if (Array.isArray(value)) {
+    return value.map((x) => Math.max(0, Number(x) || 0))
+  }
+  if (typeof value === "number") return [Math.max(0, Number(value) || 0)]
+  return []
+}
+
 export function normalizeInvokeV1(input: any): InvokeV1Spec | null {
   if (!input || typeof input !== "object") return null
   if (String(input.version) !== "1") return null
@@ -67,17 +76,22 @@ export function normalizeInvokeV1(input: any): InvokeV1Spec | null {
   if (input.headers && typeof input.headers === "object") {
     out.headers = input.headers as Record<string, string>
   }
+  if ("body_template" in input) out.body_template = input.body_template
   if ("body" in input) out.body = input.body
   if (typeof input.timeout_ms === "number") out.timeout_ms = input.timeout_ms
   if (input.retry_policy && typeof input.retry_policy === "object") {
     out.retry_policy = {
       max_attempts: Number(input.retry_policy.max_attempts ?? 1),
-      backoff_ms: Array.isArray(input.retry_policy.backoff_ms)
-        ? input.retry_policy.backoff_ms.map((x: any) => Number(x))
-        : [],
+      backoff_ms: normalizeBackoff(input.retry_policy.backoff_ms),
     }
   }
   return out
+}
+
+export function invokeNeedsConcreteBody(invoke: InvokeV1Spec): boolean {
+  const bodyCapable =
+    invoke.method === "POST" || invoke.method === "PUT" || invoke.method === "PATCH"
+  return bodyCapable && invoke.body === undefined && invoke.body_template !== undefined
 }
 
 export async function executeInvokeV1(args: {
@@ -88,7 +102,7 @@ export async function executeInvokeV1(args: {
   const invoke = args.invoke
   const timeoutMs = Math.max(1, Number(invoke.timeout_ms ?? 15000))
   const maxAttempts = Math.max(1, Number(invoke.retry_policy?.max_attempts ?? 1))
-  const backoff = invoke.retry_policy?.backoff_ms ?? []
+  const backoff = normalizeBackoff(invoke.retry_policy?.backoff_ms)
 
   let attempt = 0
   while (attempt < maxAttempts) {
@@ -165,4 +179,3 @@ export function resolveAccessPlan(args: {
   if (url) return { kind: "visit", url }
   return { kind: "none" }
 }
-

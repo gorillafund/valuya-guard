@@ -67,7 +67,6 @@ export async function prepareProductForCreate(args: {
     cfg: args.cfg,
     method: "POST",
     path: ROUTES.agentProductsPrepare,
-    body: args.payload,
+    body: { draft: args.payload },
   })
 }
-

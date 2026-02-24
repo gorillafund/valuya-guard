@@ -2,6 +2,8 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {
   executeInvokeV1,
+  invokeNeedsConcreteBody,
+  normalizeInvokeV1,
   resolveAccessPlan,
   type InvokeV1Spec,
 } from "../lib/invokeV1.js"
@@ -52,6 +54,17 @@ test("invoke v1 retries once on transient 503 and then succeeds", async () => {
   assert.equal(res.retry_count, 1)
 })
 
+test("invoke v1 normalizes numeric backoff_ms", () => {
+  const inv = normalizeInvokeV1({
+    version: "1",
+    method: "POST",
+    url: "https://example.test/invoke",
+    retry_policy: { max_attempts: 2, backoff_ms: 300 },
+  })
+  assert.ok(inv)
+  assert.deepEqual(inv.retry_policy?.backoff_ms, [300])
+})
+
 test("no invoke gives graceful visit/none fallback", () => {
   const p1 = resolveAccessPlan({
     invoke: null,
@@ -67,6 +80,17 @@ test("no invoke gives graceful visit/none fallback", () => {
   assert.equal(p2.kind, "none")
 })
 
+test("invoke with only body_template requires concrete body", () => {
+  const inv = normalizeInvokeV1({
+    version: "1",
+    method: "POST",
+    url: "https://example.test/invoke",
+    body_template: { subject: { type: "user", id: "1" } },
+  })
+  assert.ok(inv)
+  assert.equal(invokeNeedsConcreteBody(inv), true)
+})
+
 test("known backend errors map to actionable hints", () => {
   assert.match(
     backendErrorHint("product_not_found") ?? "",
@@ -74,4 +98,3 @@ test("known backend errors map to actionable hints", () => {
   )
   assert.equal(backendErrorHint("some_unknown_code"), null)
 })
-

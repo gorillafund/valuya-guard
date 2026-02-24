@@ -15,11 +15,12 @@ export type AccessInvokeV1 = {
   method: "POST" | "GET" | "PUT" | "PATCH" | "DELETE"
   url: string
   headers?: Record<string, string>
+  body_template?: unknown
   body?: unknown
   timeout_ms?: number
   retry_policy?: {
     max_attempts: number
-    backoff_ms: number[]
+    backoff_ms: number[] | number
   }
 }
 

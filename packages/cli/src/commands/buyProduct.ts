@@ -12,6 +12,7 @@ import { sendErc20Transfer } from "../chain/sendErc20.js"
 import { backendErrorHint } from "../lib/backendErrors.js"
 import {
   executeInvokeV1,
+  invokeNeedsConcreteBody,
   resolveAccessPlan,
 } from "../lib/invokeV1.js"
 
@@ -162,6 +163,11 @@ async function executeResolvedAccess(args: {
   })
 
   if (plan.kind === "invoke") {
+    if (invokeNeedsConcreteBody(plan.invoke)) {
+      throw new Error(
+        "invoke_body_missing: backend returned body_template without concrete body; refresh resolve context after payment",
+      )
+    }
     logStep(`Invoking protected endpoint (${plan.invoke.method}): ${plan.invoke.url}`)
     const result = await executeInvokeV1({
       invoke: plan.invoke,
