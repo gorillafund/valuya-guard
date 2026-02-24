@@ -9,6 +9,7 @@ import { cmdAgentAllowlistAdd } from "./commands/allowlistAdd.js"
 import { cmdAgentProductsList } from "./commands/listProducts.js"
 import { cmdAgentWhoami } from "./commands/whoami.js"
 import { cmdAgentProductResolve } from "./commands/resolveProduct.js"
+import { cmdAgentBuy } from "./commands/buyProduct.js"
 
 const program = new Command()
 
@@ -31,5 +32,6 @@ cmdAgentAllowlistAdd(program)
 cmdAgentProductsList(program)
 cmdAgentWhoami(program)
 cmdAgentProductResolve(program)
+cmdAgentBuy(program)
 
 program.parseAsync(process.argv)

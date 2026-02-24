@@ -19,6 +19,7 @@ export type ProductResolveResponse = {
   } | null
   access?: {
     resource?: string | null
+    visit_url?: string | null
     plan?: string | null
     required?: GuardRequired | null
     quantity_default?: number | null
@@ -125,4 +126,3 @@ export async function resolvePurchaseContext(args: {
     resolved: pr,
   }
 }
-
