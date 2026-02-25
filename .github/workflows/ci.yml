@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  contract-and-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate markdown
+        run: bash scripts/ci/lint-markdown.sh
+
+      - name: Validate OpenAPI
+        run: node scripts/ci/validate-openapi.js
+
+      - name: Check contract drift
+        run: node scripts/ci/check-contract-drift.js
+
+      - name: Run gateway tests
+        run: node --test docker/gateway/server.test.js
+
+      - name: Run contract harness tests
+        run: node --test tests/contract/*.test.mjs
+
+  go-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Test go-guard
+        run: cd packages/go-guard && go test ./...
+
+  gateway-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build gateway image
+        run: docker build -t valuya-guard-gateway:ci docker/gateway
+
+  examples-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify example README coverage
+        run: |
+          test -f examples/express-api/index.ts
+          test -f examples/nextjs/route.ts
+          test -f examples/fastapi/main.py
+          test -f examples/nginx-auth-request/nginx.conf
+          test -f examples/reverse-proxy/docker-compose.yml

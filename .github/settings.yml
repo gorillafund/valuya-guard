@@ -1,0 +1,19 @@
+repository:
+  name: valuya-guard
+  description: Payment-aware authorization middleware, SDKs, and reverse-proxy gateway for Valuya Guard.
+  homepage: https://pay.gorilla.build/docs
+  topics:
+    - authorization
+    - access-control
+    - monetization
+    - middleware
+    - reverse-proxy
+    - gateway
+    - payments
+    - api
+    - crypto
+    - entitlements
+    - rails
+    - laravel
+    - spring-boot
+    - golang

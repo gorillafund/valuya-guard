@@ -7,13 +7,22 @@
 - [Monorepo Capabilities](capabilities.md)
 - [Which Package Do I Use?](which-package.md)
 - [Supported vs Legacy](supported-vs-legacy.md)
+- [Adapter Standards](adapter-standards.md)
+- [Adapter Consistency Matrix](adapter-consistency-matrix.md)
+- [Versioning](versioning.md)
 
 ## Core Protocol
 
 - [Canonical Contract](protocol/canonical.md)
 - [Protocol Drift Audit](protocol/audit-2026-02-25.md)
 - [OpenAPI v2](../openapi/v2.yaml)
+- [OpenAPI Usage](openapi.md)
 - [Payment Flows](payment-flows.md)
+- [Failure Modes](failure-modes.md)
+- [Security Model](security-model.md)
+- [Performance Considerations](performance-considerations.md)
+- [Observability](observability.md)
+- [Packaging & Distribution](packaging.md)
 
 ## Adapter Guides
 

@@ -86,6 +86,9 @@ Response (minimum):
 }
 ```
 
+Session read endpoint:
+- `GET /api/v2/checkout/sessions/{session_id}`
+
 Agent response extension (when used by agent payment flow):
 - `anchor_resource`
 - `required_hash`
