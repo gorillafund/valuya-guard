@@ -26,39 +26,50 @@ class ValuyaGuardMiddleware(BaseHTTPMiddleware):
         self.tenant_token = (tenant_token or os.getenv("VALUYA_TENANT_TOKEN") or os.getenv("VALUYA_SITE_TOKEN") or "").strip()
 
     async def dispatch(self, request: Request, call_next):
-        subject = _subject_from_request(request)
-        resource = self.resource or os.getenv("VALUYA_RESOURCE") or f"http:route:{request.method.upper()}:{request.url.path}"
+        try:
+            subject = _subject_from_request(request)
+            resource = self.resource or os.getenv("VALUYA_RESOURCE") or f"http:route:{request.method.upper()}:{request.url.path}"
 
-        ent = self._entitlements(resource, subject)
-        if bool(ent.get("active")):
-            return await call_next(request)
+            ent = self._entitlements(resource, subject)
+            if bool(ent.get("active")):
+                return await call_next(request)
 
-        required = ent.get("required") or {"type": "subscription", "plan": self.plan}
-        evaluated_plan = ent.get("evaluated_plan") or self.plan
-        session = self._checkout_session(resource, subject, required, evaluated_plan)
+            required = ent.get("required") or {"type": "subscription", "plan": self.plan}
+            evaluated_plan = ent.get("evaluated_plan") or self.plan
+            session = self._checkout_session(resource, subject, required, evaluated_plan)
 
-        accept = request.headers.get("accept", "")
-        if "text/html" in accept and session.get("payment_url"):
-            r = RedirectResponse(session["payment_url"], status_code=302)
-            r.headers["X-Valuya-Session-Id"] = session["session_id"]
-            return r
+            accept = request.headers.get("accept", "")
+            if "text/html" in accept and session.get("payment_url"):
+                r = RedirectResponse(session["payment_url"], status_code=302)
+                r.headers["X-Valuya-Session-Id"] = session["session_id"]
+                return r
 
-        body = {
-            "error": "payment_required",
-            "reason": ent.get("reason") or "payment_required",
-            "required": required,
-            "evaluated_plan": evaluated_plan,
-            "resource": resource,
-            "session_id": session["session_id"],
-            "payment_url": session.get("payment_url", ""),
-        }
-        headers = {
-            "Cache-Control": "no-store",
-            "X-Valuya-Payment-Url": session.get("payment_url", ""),
-            "X-Valuya-Session-Id": session["session_id"],
-            "Access-Control-Expose-Headers": "X-Valuya-Payment-Url, X-Valuya-Session-Id",
-        }
-        return JSONResponse(body, status_code=402, headers=headers)
+            body = {
+                "error": "payment_required",
+                "reason": ent.get("reason") or "payment_required",
+                "required": required,
+                "evaluated_plan": evaluated_plan,
+                "resource": resource,
+                "session_id": session["session_id"],
+                "payment_url": session.get("payment_url", ""),
+            }
+            headers = {
+                "Cache-Control": "no-store",
+                "X-Valuya-Payment-Url": session.get("payment_url", ""),
+                "X-Valuya-Session-Id": session["session_id"],
+                "Access-Control-Expose-Headers": "X-Valuya-Payment-Url, X-Valuya-Session-Id",
+            }
+            return JSONResponse(body, status_code=402, headers=headers)
+        except Exception as exc:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "valuya_guard_unavailable",
+                    "message": str(exc),
+                },
+                status_code=503,
+                headers={"Cache-Control": "no-store"},
+            )
 
     def _headers(self, subject: dict) -> dict:
         h = {

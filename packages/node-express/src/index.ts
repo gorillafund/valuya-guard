@@ -37,46 +37,57 @@ export function valuyaExpress(opts: ValuyaExpressOptions = {}) {
   const plan = (opts.plan || process.env.VALUYA_PLAN || "pro").trim() || "pro"
 
   return async (req: ExpressLikeReq, res: ExpressLikeRes, next: NextFn) => {
-    const subject = opts.subject ? opts.subject(req) : defaultSubject(req)
-    const resource = (opts.resource || process.env.VALUYA_RESOURCE || "").trim() || httpRouteResource(req.method || "GET", req.path || req.originalUrl || req.url || "/")
+    try {
+      const subject = opts.subject ? opts.subject(req) : defaultSubject(req)
+      const resource = (opts.resource || process.env.VALUYA_RESOURCE || "").trim() || httpRouteResource(req.method || "GET", req.path || req.originalUrl || req.url || "/")
 
-    const cfg: GuardClientConfig = { base, tenantToken: tenantToken || undefined }
-    const ent = await fetchEntitlements({ cfg, plan, resource, subject })
-    if (ent.active === true) return next()
+      const cfg: GuardClientConfig = { base, tenantToken: tenantToken || undefined }
+      const ent = await fetchEntitlements({ cfg, plan, resource, subject })
+      if (ent.active === true) return next()
 
-    const required: GuardRequired = (ent as any).required ?? { type: "subscription", plan }
-    const evaluatedPlan = (ent as any).evaluated_plan || plan
+      const required: GuardRequired = (ent as any).required ?? { type: "subscription", plan }
+      const evaluatedPlan = (ent as any).evaluated_plan || plan
 
-    const session = await createCheckoutSession({
-      cfg,
-      plan: evaluatedPlan,
-      resource,
-      subject,
-      required,
-      successUrl: opts.successUrl,
-      cancelUrl: opts.cancelUrl,
-      idempotencyKey: makeIdempotencyKey(subject, resource, required, evaluatedPlan),
-    })
+      const session = await createCheckoutSession({
+        cfg,
+        plan: evaluatedPlan,
+        resource,
+        subject,
+        required,
+        successUrl: opts.successUrl,
+        cancelUrl: opts.cancelUrl,
+        idempotencyKey: makeIdempotencyKey(subject, resource, required, evaluatedPlan),
+      })
 
-    const accept = String((req.headers || {})["accept"] || "")
-    if (accept.includes("text/html") && session.payment_url) {
-      res.setHeader("X-Valuya-Session-Id", session.session_id)
-      return res.redirect(session.payment_url)
+      const accept = String((req.headers || {})["accept"] || "")
+      if (accept.includes("text/html") && session.payment_url) {
+        res.setHeader("X-Valuya-Session-Id", session.session_id)
+        return res.redirect(session.payment_url)
+      }
+
+      const pr = paymentRequiredResponseV2({
+        reason: (ent as any).reason || "payment_required",
+        required,
+        evaluated_plan: evaluatedPlan,
+        resource,
+        session_id: session.session_id,
+        payment_url: session.payment_url,
+        payment: (session as any).payment,
+      })
+
+      res.status(pr.status)
+      for (const [k, v] of Object.entries(pr.headers)) res.setHeader(k, String(v))
+      return res.json(JSON.parse(pr.body))
+    } catch (error) {
+      res.status(503)
+      res.setHeader("Content-Type", "application/json; charset=utf-8")
+      res.setHeader("Cache-Control", "no-store")
+      return res.json({
+        ok: false,
+        error: "valuya_guard_unavailable",
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
-
-    const pr = paymentRequiredResponseV2({
-      reason: (ent as any).reason || "payment_required",
-      required,
-      evaluated_plan: evaluatedPlan,
-      resource,
-      session_id: session.session_id,
-      payment_url: session.payment_url,
-      payment: (session as any).payment,
-    })
-
-    res.status(pr.status)
-    for (const [k, v] of Object.entries(pr.headers)) res.setHeader(k, String(v))
-    return res.json(JSON.parse(pr.body))
   }
 }
 

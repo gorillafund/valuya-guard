@@ -25,3 +25,4 @@ app.get("/premium", (_req, res) => {
 Behavior:
 - entitlement active => request proceeds
 - entitlement missing => `402 payment_required` with `payment_url` + `session_id`
+- guard backend/network failure => `503` JSON (`valuya_guard_unavailable`) fail-closed

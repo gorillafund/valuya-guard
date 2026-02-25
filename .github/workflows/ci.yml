@@ -40,6 +40,58 @@ jobs:
       - name: Test go-guard
         run: cd packages/go-guard && go test ./...
 
+  rails-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: packages/rails
+      - name: Run rails adapter specs
+        run: cd packages/rails && bundle exec rspec
+
+  python-adapters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate python adapter syntax
+        run: |
+          python -m py_compile packages/fastapi/valuya_fastapi/*.py
+          python -m py_compile packages/django/valuya_django/*.py
+          python -m py_compile packages/aws-lambda-python/valuya_guard/*.py
+          python -m py_compile examples/fastapi/main.py
+          python -m py_compile examples/django/views.py
+          python -m py_compile examples/lambda-python-api/lambda_function.py
+          python -m py_compile examples/lambda-python-ai/lambda_function.py
+
+  php-adapters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate laravel adapter syntax
+        run: |
+          php -l packages/laravel/src/Middleware/ValuyaGuardMiddleware.php
+          php -l packages/laravel/src/ValuyaClient.php
+          php -l packages/laravel/src/ValuyaGuardServiceProvider.php
+          php -l examples/laravel/routes/api.php
+
+  spring-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+      - name: Build spring boot starter
+        run: cd packages/spring-boot-starter && mvn -B -DskipTests package
+
   gateway-image:
     runs-on: ubuntu-latest
     steps:
@@ -58,3 +110,7 @@ jobs:
           test -f examples/fastapi/main.py
           test -f examples/nginx-auth-request/nginx.conf
           test -f examples/reverse-proxy/docker-compose.yml
+          test -f examples/rails/README.md
+          test -f examples/laravel/README.md
+          test -f examples/spring-boot/README.md
+          test -f examples/go-nethttp/main.go
