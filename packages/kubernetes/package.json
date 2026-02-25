@@ -3,9 +3,14 @@
   "version": "0.2.0-beta.1",
   "type": "module",
   "main": "index.js",
-  "files": ["index.js", "templates", "README.md"],
+  "files": [
+    "index.js",
+    "templates",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public",
     "tag": "next"
-  }
+  },
+  "license": "MIT"
 }

@@ -10,5 +10,6 @@
   "publishConfig": {
     "access": "public",
     "tag": "next"
-  }
+  },
+  "license": "MIT"
 }

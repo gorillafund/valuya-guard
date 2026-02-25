@@ -13,5 +13,6 @@
     "publish:next:dry": "./scripts/publish-next.sh --dry-run",
     "publish:python": "./scripts/publish-python.sh",
     "publish:python:dry": "./scripts/publish-python.sh --dry-run"
-  }
+  },
+  "license": "MIT"
 }
