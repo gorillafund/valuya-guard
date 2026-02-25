@@ -1,91 +1,109 @@
-# Valuya Guard
+# Valuya Guard Monorepo
 
-Payment-aware authorization adapters for Valuya Guard.
+Valuya Guard provides payment-aware authorization for apps, APIs, agents, bots, and reverse proxies.
 
-This monorepo provides framework and runtime adapters that enforce:
+A protected integration always follows the same baseline behavior:
 
-1. Entitlement check (`/api/v2/entitlements`)
-2. Checkout session creation when required (`/api/v2/checkout/sessions`)
-3. `402 payment_required` response (or redirect for HTML clients)
+1. `GET /api/v2/entitlements` for subject/resource/plan
+2. If active => allow
+3. If inactive => `POST /api/v2/checkout/sessions`
+4. Web clients => `302` redirect to `payment_url`
+5. API clients => `402 payment_required` JSON with `payment_url` + `session_id`
 
-## Packages
+## Start Here
+
+- Fast start: [docs/quickstart.md](docs/quickstart.md)
+- Docs index: [docs/README.md](docs/README.md)
+- Choose your path: [docs/choose-your-path.md](docs/choose-your-path.md)
+- Monorepo capability matrix: [docs/capabilities.md](docs/capabilities.md)
+- Which package to install: [docs/which-package.md](docs/which-package.md)
+- Supported vs legacy adapters: [docs/supported-vs-legacy.md](docs/supported-vs-legacy.md)
+
+## Core Protocol
+
+- Canonical contract: [docs/protocol/canonical.md](docs/protocol/canonical.md)
+- OpenAPI v2: [openapi/v2.yaml](openapi/v2.yaml)
+- Agent protocol RFC: [RFC_AGENT_CLIENT_PROTOCOL_V1.md](RFC_AGENT_CLIENT_PROTOCOL_V1.md)
+- Product authoring RFC: [RFC_AGENT_PRODUCT_AUTHORING_API.md](RFC_AGENT_PRODUCT_AUTHORING_API.md)
+
+## Package Groups
+
+### Protocol + SDK
 
 - `@valuya/core`
 - `@valuya/agent`
 - `@valuya/cli`
-- `@valuya/aws-lambda-node`
-- `valuya-guard` (Python, AWS Lambda)
-- `valuya-fastapi`
-- `@valuya/telegram-bot`
-- `@valuya/discord-bot`
-- `@valuya/agentokratia-signer`
+
+### Node / JS runtime adapters
+
 - `@valuya/node-express`
 - `@valuya/node-koa`
-- `@valuya/cloudflare-workers`
-- `@valuya/vercel-edge`
-- `@valuya/fastly-compute`
 - `@valuya/nextjs`
 - `@valuya/nestjs`
 - `@valuya/hono`
+- `@valuya/cloudflare-workers`
+- `@valuya/vercel-edge`
+- `@valuya/fastly-compute`
 - `@valuya/client-js`
-- `github.com/valuya/go-middleware`
+- `@valuya/aws-lambda-node`
+
+### Python adapters
+
+- `valuya-guard` (AWS Lambda Python)
+- `valuya-fastapi`
 - `valuya-django`
-- `@valuya/kubernetes`
+
+### Bot adapters
+
+- `@valuya/telegram-bot`
+- `@valuya/discord-bot`
+
+### Agent wallet bridge
+
+- `@valuya/agentokratia-signer`
+
+### Infrastructure / proxy mode
+
 - `@valuya/nginx-auth-request`
+- `@valuya/kubernetes`
 - `@valuya/reverse-proxy`
-- `valuya/guard-laravel` (Composer)
-- `valuya-guard-rails` (Gem)
-- `valuya-guard-spring-boot-starter` (Maven)
-- `github.com/valuya/go-guard`
+- `docker/gateway` (drop-in auth gateway)
 
-## Adapter docs
+### Ecosystem-native packages (non-npm)
 
-- [AWS Lambda (Node)](docs/aws-lambda.md)
-- [AWS Lambda (Python)](docs/aws-lambda-python.md)
-- [FastAPI](docs/fastapi.md)
-- [Telegram Bot](docs/telegram-bot.md)
-- [Discord Bot](docs/discord-bot.md)
-- [Agentokratia Guardian](docs/agentokratia-guardian-integration.md)
-- [Node Express](docs/node-express.md)
-- [Node Koa](docs/node-koa.md)
-- [Cloudflare Workers](docs/cloudflare-workers.md)
-- [Vercel Edge](docs/vercel-edge.md)
-- [Fastly Compute](docs/fastly-compute.md)
-- [Next.js](docs/nextjs.md)
-- [NestJS](docs/nestjs.md)
-- [Hono](docs/hono.md)
-- [Client JS](docs/client-js.md)
-- [Go Middleware](docs/go-middleware.md)
-- [Django](docs/django.md)
-- [Kubernetes](docs/kubernetes.md)
-- [Nginx auth_request](docs/nginx-auth-request.md)
-- [Reverse Proxy](docs/reverse-proxy.md)
-- [Laravel](docs/laravel.md)
-- [Rails](docs/rails.md)
-- [Spring Boot](docs/spring-boot.md)
-- [Go net/http](docs/go-nethttp.md)
+- `valuya/guard-laravel` (Composer package source in `packages/laravel`)
+- `valuya-guard-rails` (Gem source in `packages/rails`)
+- `valuya-guard-spring-boot-starter` (Maven starter source in `packages/spring-boot-starter`)
+- `github.com/valuya/go-guard` (Go module source in `packages/go-guard`)
 
 ## Examples
 
-See `examples/` for runnable reference integrations.
+Runnable references are in `examples/`.
 
-## Environment
+Key examples:
 
-Most server adapters support:
+- `examples/express-api`
+- `examples/nextjs`
+- `examples/fastapi`
+- `examples/nginx-auth-request`
+- `examples/reverse-proxy`
+- `examples/traefik`
+- `examples/go-nethttp`
+- `examples/laravel`
+- `examples/rails`
+- `examples/spring-boot`
+- `examples/telegram-bot-template`
+- `examples/discord-bot-template`
+
+## Default Environment Model
+
+Most adapters support:
 
 - `VALUYA_BASE` (required)
 - `VALUYA_TENANT_TOKEN` (recommended)
 - `VALUYA_SITE_TOKEN` (legacy compatibility)
-- `VALUYA_PLAN` (default: `pro`)
-- `VALUYA_RESOURCE` (optional override)
-
-## Protocol
-
-- [Agent protocol RFC](RFC_AGENT_CLIENT_PROTOCOL_V1.md)
-- [Product authoring RFC](RFC_AGENT_PRODUCT_AUTHORING_API.md)
-- [Canonical Contract](docs/protocol/canonical.md)
-- [Protocol Drift Audit (2026-02-25)](docs/protocol/audit-2026-02-25.md)
-- [OpenAPI v2](openapi/v2.yaml)
+- `VALUYA_PLAN` (default: `standard`)
+- `VALUYA_RESOURCE` (optional explicit override)
 
 ## Publishing
 

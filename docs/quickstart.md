@@ -1,6 +1,6 @@
 # Quickstart
 
-Goal: first protected route in 10-20 minutes.
+Goal: protect one endpoint in 10-20 minutes.
 
 ## Shared env
 
@@ -9,6 +9,12 @@ export VALUYA_BASE="https://pay.gorilla.build"
 export VALUYA_TENANT_TOKEN="ttok_..."
 export VALUYA_PLAN="standard"
 ```
+
+## Pick your path
+
+- Website paywall / API monetization: [choose-your-path.md](choose-your-path.md)
+- Package lookup by framework: [which-package.md](which-package.md)
+- Canonical behavior and payloads: [payment-flows.md](payment-flows.md)
 
 ## 1) Express
 
@@ -50,9 +56,9 @@ app.add_middleware(ValuyaGuardMiddleware, plan="standard")
 
 ## 4) Nginx drop-in (no app code)
 
-Example: `examples/nginx-auth-request` and `docs/reverse-proxy.md`
+Examples: `examples/nginx-auth-request`, `examples/reverse-proxy`
 
-Use `auth_request` against Valuya guard gateway and keep upstream app unchanged.
+Use gateway + proxy config from [reverse-proxy.md](reverse-proxy.md).
 
 ## Expected behavior
 
