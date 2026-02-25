@@ -1,0 +1,26 @@
+services:
+  valuya_guard_gateway:
+    build: ../../docker/gateway
+    environment:
+      VALUYA_BASE: ${VALUYA_BASE}
+      VALUYA_TENANT_TOKEN: ${VALUYA_TENANT_TOKEN}
+      VALUYA_PLAN: standard
+      VALUYA_WEB_REDIRECT: "true"
+    ports:
+      - "8090:8090"
+
+  upstream_app:
+    image: nginx:alpine
+    command: ["/bin/sh", "-c", "echo '{\"ok\":true}' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"]
+    ports:
+      - "8080:80"
+
+  nginx_proxy:
+    image: nginx:alpine
+    volumes:
+      - ../../packages/reverse-proxy/templates/nginx/auth_request.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8081:8081"
+    depends_on:
+      - valuya_guard_gateway
+      - upstream_app

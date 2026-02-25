@@ -1,0 +1,11 @@
+:8082 {
+  @protected path *
+
+  route @protected {
+    forward_auth http://valuya_guard_gateway:8090 {
+      uri /guard/check
+      copy_headers X-Valuya-Payment-Url X-Valuya-Session-Id
+    }
+    reverse_proxy upstream_app:8080
+  }
+}

@@ -10,6 +10,11 @@
 - `@valuya/telegram-bot`: Telegram payment-gating adapter with prompt helpers.
 - `@valuya/discord-bot`: Discord payment-gating adapter with button-ready prompts.
 - `@valuya/agentokratia-signer`: Guardian wallet bridge for Valuya agent purchase + invoke flows.
+- `valuya/guard-laravel`: Laravel middleware adapter.
+- `valuya-guard-rails`: Rails rack middleware + controller helper.
+- `valuya-guard-spring-boot-starter`: Spring Boot filter starter.
+- `github.com/valuya/go-guard`: Go net/http middleware adapter.
+- `@valuya/reverse-proxy`: Nginx/Traefik/Caddy drop-in template package.
 
 ### Release Notes Entries
 - New framework adapters now available for NestJS, Next.js, Hono, and Django.

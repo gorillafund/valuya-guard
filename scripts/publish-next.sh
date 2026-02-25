@@ -72,6 +72,7 @@ publish_pkg "@valuya/hono"
 publish_pkg "@valuya/aws-lambda-node"
 publish_pkg "@valuya/kubernetes"
 publish_pkg "@valuya/nginx-auth-request"
+publish_pkg "@valuya/reverse-proxy"
 publish_pkg "@valuya/cli"
 
 echo "Done."

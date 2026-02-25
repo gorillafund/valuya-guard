@@ -1,0 +1,24 @@
+{
+  "name": "valuya/guard-laravel",
+  "description": "Valuya Guard middleware for Laravel",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.1",
+    "illuminate/support": "^10.0|^11.0",
+    "illuminate/http": "^10.0|^11.0",
+    "guzzlehttp/guzzle": "^7.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Valuya\\Guard\\Laravel\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Valuya\\Guard\\Laravel\\ValuyaGuardServiceProvider"
+      ]
+    }
+  }
+}

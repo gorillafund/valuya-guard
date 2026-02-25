@@ -32,6 +32,11 @@ This monorepo provides framework and runtime adapters that enforce:
 - `valuya-django`
 - `@valuya/kubernetes`
 - `@valuya/nginx-auth-request`
+- `@valuya/reverse-proxy`
+- `valuya/guard-laravel` (Composer)
+- `valuya-guard-rails` (Gem)
+- `valuya-guard-spring-boot-starter` (Maven)
+- `github.com/valuya/go-guard`
 
 ## Adapter docs
 
@@ -54,6 +59,11 @@ This monorepo provides framework and runtime adapters that enforce:
 - [Django](docs/django.md)
 - [Kubernetes](docs/kubernetes.md)
 - [Nginx auth_request](docs/nginx-auth-request.md)
+- [Reverse Proxy](docs/reverse-proxy.md)
+- [Laravel](docs/laravel.md)
+- [Rails](docs/rails.md)
+- [Spring Boot](docs/spring-boot.md)
+- [Go net/http](docs/go-nethttp.md)
 
 ## Examples
 
@@ -73,6 +83,9 @@ Most server adapters support:
 
 - [Agent protocol RFC](RFC_AGENT_CLIENT_PROTOCOL_V1.md)
 - [Product authoring RFC](RFC_AGENT_PRODUCT_AUTHORING_API.md)
+- [Canonical Contract](docs/protocol/canonical.md)
+- [Protocol Drift Audit (2026-02-25)](docs/protocol/audit-2026-02-25.md)
+- [OpenAPI v2](openapi/v2.yaml)
 
 ## Publishing
 

@@ -1,0 +1,515 @@
+openapi: 3.1.0
+info:
+  title: Valuya Guard API
+  version: 2.0.0
+  description: Canonical Valuya Guard v2 contract aligned with docs/protocol/canonical.md
+servers:
+  - url: https://pay.gorilla.build
+paths:
+  /api/v2/entitlements:
+    get:
+      summary: Evaluate entitlement for subject/resource/plan
+      parameters:
+        - in: query
+          name: plan
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: resource
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Valuya-Subject-Id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Authorization
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Entitlement decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitlementsResponse'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/checkout/sessions:
+    post:
+      summary: Create checkout session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutSessionCreateRequest'
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCheckoutSessionResponseV2'
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRequiredBodyV2'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/checkout/sessions/{session_id}:
+    get:
+      summary: Read checkout session
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCheckoutSessionResponseV2'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/agent/sessions/{session_id}/tx:
+    post:
+      summary: Submit agent tx proof
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [wallet_address, tx_hash, signature, proof]
+              properties:
+                wallet_address: { type: string }
+                tx_hash: { type: string }
+                signature: { type: string }
+                proof: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/agent/sessions/{session_id}/verify:
+    post:
+      summary: Verify payment session
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [wallet_address]
+              properties:
+                wallet_address: { type: string }
+      responses:
+        '200':
+          description: Verification status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifySessionResponse'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/agent/whoami:
+    get:
+      summary: Resolve agent identity and principal binding
+      responses:
+        '200':
+          description: Identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhoamiResponse'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/agent/products/resolve:
+    post:
+      summary: Resolve product to purchase context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [product_id]
+                  properties:
+                    product_id: { oneOf: [{ type: integer }, { type: string }] }
+                - type: object
+                  required: [slug]
+                  properties:
+                    slug: { type: string }
+                - type: object
+                  required: [external_id]
+                  properties:
+                    external_id: { type: string }
+      responses:
+        '200':
+          description: Product context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResolveResponse'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/agent/products/types:
+    get:
+      summary: List product authoring types
+      responses:
+        '200':
+          description: Types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  types:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/agent/products/schema/{type}:
+    get:
+      summary: Get product authoring JSON schema for type
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Schema
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v2/agent/products/prepare:
+    post:
+      summary: Prepare deterministic product payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [draft]
+              properties:
+                draft:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Prepared product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  resource: { type: string }
+                  product:
+                    type: object
+                    additionalProperties: true
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          type: boolean
+          const: false
+        error:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    Subject:
+      type: object
+      required: [type, id]
+      properties:
+        type: { type: string }
+        id: { type: string }
+    GuardRequired:
+      oneOf:
+        - type: object
+          required: [type, plan]
+          properties:
+            type: { const: subscription }
+            plan: { type: string }
+        - type: object
+          required: [type]
+          properties:
+            type: { type: string }
+      description: Simplified contract-level union; see @valuya/core for full union.
+    EntitlementsAllow:
+      type: object
+      required: [active, evaluated_plan]
+      properties:
+        active: { const: true }
+        evaluated_plan: { type: string }
+        expires_at: { type: string, format: date-time }
+        mandate_id:
+          oneOf:
+            - type: string
+            - type: integer
+    EntitlementsDeny:
+      type: object
+      required: [active, reason, required, evaluated_plan, anchor_resource]
+      properties:
+        active: { const: false }
+        reason: { type: string }
+        required: { $ref: '#/components/schemas/GuardRequired' }
+        evaluated_plan: { type: string }
+        anchor_resource: { type: string }
+        subject:
+          oneOf:
+            - $ref: '#/components/schemas/Subject'
+            - type: 'null'
+    EntitlementsResponse:
+      oneOf:
+        - $ref: '#/components/schemas/EntitlementsAllow'
+        - $ref: '#/components/schemas/EntitlementsDeny'
+    PaymentInstruction:
+      oneOf:
+        - type: object
+          required: [method, currency, token, chain_id, to_address, amount_raw, decimals, token_address]
+          properties:
+            method: { const: onchain }
+            currency: { type: string }
+            token: { type: string }
+            chain_id: { type: integer }
+            to_address: { type: string }
+            amount_raw: { type: string }
+            decimals: { type: integer }
+            token_address: { type: string }
+        - type: object
+          required: [method, is_free]
+          properties:
+            method: { const: free }
+            is_free: { const: true }
+    CheckoutSessionCreateRequest:
+      type: object
+      required: [resource, plan, evaluated_plan, subject, required]
+      properties:
+        resource: { type: string }
+        plan: { type: string }
+        evaluated_plan: { type: string }
+        subject: { $ref: '#/components/schemas/Subject' }
+        principal: { $ref: '#/components/schemas/Subject' }
+        required: { $ref: '#/components/schemas/GuardRequired' }
+        mode: { type: string }
+        origin: { type: string }
+        quantity_requested: { type: integer }
+    CheckoutSessionResponse:
+      type: object
+      required: [payment_url, session_id]
+      properties:
+        payment_url: { type: string }
+        session_id: { type: string }
+        expires_at: { type: string, format: date-time }
+    AgentCheckoutSessionResponseV2:
+      allOf:
+        - $ref: '#/components/schemas/CheckoutSessionResponse'
+        - type: object
+          properties:
+            anchor_resource: { type: string }
+            required_hash: { type: string }
+            pricing_hash: { type: string }
+            quantity_effective: { type: integer }
+            payment: { $ref: '#/components/schemas/PaymentInstruction' }
+            server_time: { type: string, format: date-time }
+            agent_proof_ttl_seconds: { type: integer }
+    PaymentRequiredBodyV2:
+      type: object
+      required: [error, reason, required, evaluated_plan, resource, session_id, payment_url]
+      properties:
+        error: { const: payment_required }
+        reason: { type: string }
+        required: { $ref: '#/components/schemas/GuardRequired' }
+        evaluated_plan: { type: string }
+        resource: { type: string }
+        session_id: { type: string }
+        payment_url: { type: string }
+        payment: { $ref: '#/components/schemas/PaymentInstruction' }
+    VerifySessionResponse:
+      type: object
+      additionalProperties: true
+    AccessInvokeV1:
+      type: object
+      required: [version, method, url]
+      properties:
+        version: { const: '1' }
+        method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+        url: { type: string, format: uri }
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        body_template:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        body:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        timeout_ms: { type: integer }
+        retry_policy:
+          type: object
+          properties:
+            max_attempts: { type: integer }
+            backoff_ms:
+              oneOf:
+                - type: integer
+                - type: array
+                  items: { type: integer }
+    ProductResolveResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        product:
+          type: object
+          properties:
+            id:
+              oneOf:
+                - type: integer
+                - type: string
+            slug:
+              oneOf:
+                - type: string
+                - type: 'null'
+            plan:
+              oneOf:
+                - type: string
+                - type: 'null'
+        access:
+          type: object
+          properties:
+            resource:
+              oneOf:
+                - type: string
+                - type: 'null'
+            visit_url:
+              oneOf:
+                - type: string
+                - type: 'null'
+            plan:
+              oneOf:
+                - type: string
+                - type: 'null'
+            required:
+              oneOf:
+                - $ref: '#/components/schemas/GuardRequired'
+                - type: 'null'
+            quantity_default:
+              oneOf:
+                - type: integer
+                - type: 'null'
+            subject:
+              oneOf:
+                - $ref: '#/components/schemas/Subject'
+                - type: 'null'
+            principal:
+              oneOf:
+                - $ref: '#/components/schemas/Subject'
+                - type: 'null'
+            invoke:
+              oneOf:
+                - $ref: '#/components/schemas/AccessInvokeV1'
+                - type: 'null'
+    WhoamiResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        agent:
+          type: object
+          properties:
+            token_id: { type: string }
+            wallet_address:
+              oneOf:
+                - type: string
+                - type: 'null'
+            scopes:
+              type: array
+              items: { type: string }
+        principal:
+          type: object
+          properties:
+            subject:
+              oneOf:
+                - $ref: '#/components/schemas/Subject'
+                - type: 'null'
+        tenant:
+          type: object
+          properties:
+            id:
+              oneOf:
+                - type: integer
+                - type: string
+            slug:
+              oneOf:
+                - type: string
+                - type: 'null'
+        capabilities:
+          type: object
+          additionalProperties:
+            type: boolean

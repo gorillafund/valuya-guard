@@ -1,0 +1,22 @@
+http:
+  middlewares:
+    valuya-auth:
+      forwardAuth:
+        address: http://valuya_guard_gateway:8090/guard/check
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Valuya-Payment-Url
+          - X-Valuya-Session-Id
+
+  routers:
+    app-router:
+      rule: Host(`app.localhost`)
+      service: app-service
+      middlewares:
+        - valuya-auth
+
+  services:
+    app-service:
+      loadBalancer:
+        servers:
+          - url: http://upstream_app:8080
