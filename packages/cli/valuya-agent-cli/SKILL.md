@@ -1,20 +1,9 @@
 ---
-
-## `SKILL.md` (Agent Skills spec) — “valuya-agent-cli”
-
-Create a folder named `valuya-agent-cli/` and put this file at `valuya-agent-cli/SKILL.md`:
-
-```md
----
-
 name: valuya-agent-cli
 description: Purchase and verify access to Valuya Guard resources via the Agent Payment Proof v2 flow (create checkout session, pay on-chain if needed, submit tx with signed proof, verify session, mint mandate). Use for debugging Guard agent payments, automating purchases, allowlisting wallets, and creating products for demos.
 license: Proprietary
 compatibility: Requires Node.js, the Valuya Guard API base URL, a tenant token, and (for paid flows) an EVM RPC URL plus an EVM private key.
 metadata:
-author: gorilla-funds
-version: "1.0"
-
 ---
 
 ## Purpose
