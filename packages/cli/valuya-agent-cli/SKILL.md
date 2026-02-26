@@ -88,7 +88,7 @@ Optional:
 Example:
 
 ```bash
-node dist/bin.js --base https://pay.example.com --tenant-token "$TOKEN" \
+node dist/bin.js --base https://pay.gorilla.build --tenant-token "$TOKEN" \
   session:create --subject user:123 --resource n8n:workflow:abc --plan standard
 ```
 
