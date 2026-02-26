@@ -1,195 +1,173 @@
 ---
 name: valuya-agent-cli
-description: Purchase and verify access to Valuya Guard resources via the Agent Payment Proof v2 flow (create checkout session, pay on-chain if needed, submit tx with signed proof, verify session, mint mandate). Use for debugging Guard agent payments, automating purchases, allowlisting wallets, and creating products for demos.
-license: Proprietary
-compatibility: Requires Node.js, the Valuya Guard API base URL, a tenant token, and (for paid flows) an EVM RPC URL plus an EVM private key.
-metadata:
+description: Use the Valuya Guard CLI for product-based purchases (`agent:buy`), payment+mandate flow (`agent:pay`), low-level proof debugging (`session:create`, `sign-proof`, `submit-tx`), and agent product/admin operations.
 ---
 
-## Purpose
+## When to use
 
-This skill helps an agent (or developer) use the **Valuya Guard Agent CLI** to:
+Use this skill when tasks mention:
 
-- create checkout sessions for a `subject` buying a `plan` for a `resource`
-- execute payment rails (primarily **ERC-20 on-chain transfer**)
-- submit an **Agent Payment Proof v2** (signed by the paying wallet)
-- verify the payment and mint a **mandate** (entitlement) in Guard
-- manage operational prerequisites: **wallet allowlisting**, basic product creation
+- Valuya Guard checkout/payment/mandate flows
+- Agent Payment Proof v2 signing/submission issues
+- product resolution, dry-run, invoke-v1 execution, or `agent:buy`
+- CLI-based product creation or allowlist updates
 
-Use this skill when the task mentions:
+## Command map
 
-- Guard agent payments, `agent:pay`, `submit-tx`, `verify`, mandates, entitlements
-- wallet allowlists, tx proofs, signature verification, `wallet_mismatch`
-- end-to-end payment demo automation (e.g. “telegram voice → buy coffee instantly”)
+Use `valuya <command>` after installing the CLI package, or `node dist/bin.js <command>` in this package.
 
----
+### Product-first purchase flow (recommended)
 
-## Concepts and objects
+- `agent:buy --product <ref>`
 
-### Subject
+What it does:
 
-A principal identifier in `<type>:<id>` format (e.g. `user:3`, `anon:<uuid>`).
-Guard uses it to mint mandates keyed by `(tenant_id, subject_type, subject_id, resource, plan, product_id)`.
+1. Resolves product purchase context.
+2. Executes payment flow.
+3. Verifies and mints mandate.
+4. Executes backend-provided `access.invoke` when present; otherwise falls back to `visit_url` or `--resource-url`.
 
-### Resource
+Useful flags:
 
-A deterministic canonical resource identifier (e.g. `n8n:workflow:<id>`).  
-The **anchor_resource** is what mandates are keyed on and what proofs must bind to.
+- `--resource-url <url>` override resolved visit URL
+- `--resource-auth <bearer>` bearer for resource call
+- `--method <GET|POST|...>` method for visit fallback
+- `--no-visit` skip post-payment resource call
 
-### Plan
+Required env:
 
-Opaque string (e.g. `standard`, `free`). The plan is part of the mandate uniqueness key.
+- `VALUYA_BASE`
+- `VALUYA_TENANT_TOKEN`
+- `VALUYA_PRIVATE_KEY`
 
-### Checkout session
+Optional env:
 
-Created by Guard. Includes pricing + routing fields that must match in the proof.
+- `VALUYA_RPC_URL` (required only for onchain payments)
+- `VALUYA_POLL_INTERVAL` (default `3000`)
+- `VALUYA_POLL_TIMEOUT` (default `60000`)
+- `VALUYA_RESOURCE_AUTH`
 
-### Agent Payment Proof v2
+### Env-driven pay flow
 
-A signed message binding:
+- `agent:pay [--product <ref>]`
 
-- session_id
-- tx_hash
-- anchor_resource
-- required_hash
-- pricing_hash + quantity_effective
-- chain_id + token_address + to_address + amount_raw + decimals
-- expires_at
+Two modes:
 
-Guard recovers the address from `personal_sign` and enforces that it matches `wallet_address`.
+- Explicit context mode: set `VALUYA_SUBJECT` (`<type>:<id>`), `VALUYA_RESOURCE`, `VALUYA_PLAN`.
+- Product mode: provide `--product` or `VALUYA_PRODUCT`; context is resolved from backend.
 
----
+Also requires:
 
-## Recommended flow (one command)
+- `VALUYA_BASE`
+- `VALUYA_TENANT_TOKEN`
+- `VALUYA_PRIVATE_KEY`
+- `VALUYA_RPC_URL`
 
-Use the high-level command whenever possible.
+## Low-level debugging flow
 
-### Command: `agent:pay` (env-driven)
+Use these when isolating session/proof issues.
 
-Set:
+### 1) Create session
 
-- `VALUYA_BASE` (Guard base URL)
-- `VALUYA_TENANT_TOKEN` (tenant bearer token)
-- `VALUYA_SUBJECT` (`<type>:<id>`)
-- `VALUYA_RESOURCE`
-- `VALUYA_PLAN`
-- `VALUYA_PRIVATE_KEY` (wallet used to pay + sign)
-- `VALUYA_RPC_URL` (required for paid flows)
+`session:create` uses global options (or env fallback):
+
+- `--base <url>` / `VALUYA_BASE`
+- `--tenant-token <token>` / `VALUYA_TENANT_TOKEN`
+
+Required flags:
+
+- `--subject <type:id>`
+- `--resource <resource>`
+- `--plan <plan>`
 
 Optional:
 
-- `VALUYA_POLL_INTERVAL` (ms)
-- `VALUYA_POLL_TIMEOUT` (ms)
+- `--origin <origin>`
+- `--quantity <n>`
 
-Run:
-
-```bash
-valuya agent:pay
-# or: node dist/bin.js agent:pay
-```
-
-Expected outcome:
-
-- prints "Mandate minted" and returns verification payload including mandate info.
-
-## Debugging flows (step-by-step commands)
-
-Use the low-level commands to debug each step in isolation:
-
-### Command (Create Session): `agent:create-session`
+Example:
 
 ```bash
-pnpm dist/bin.js agent:create-session \
---base <BASE>
---tenant_token <TOKEN> \
---subject_type <TYPE>
---subject_id <ID> \
---resource <RESOURCE>
---plan <PLAN>
+node dist/bin.js --base https://pay.example.com --tenant-token "$TOKEN" \
+  session:create --subject user:123 --resource n8n:workflow:abc --plan standard
 ```
 
-Safe session_id and inspect
+### 2) Build + sign proof from session
 
-- required_hash should match the hash of the GuardRequired object you sent
-- pricing_hash should match the hash of the plan + quantity you sent
-- anchor_resource should match the resource you sent
-- payment fields (chain_id, token_address, to_address) should match what you expect for the plan
-- anchor_resource should match the resource you sent
-- expires_at should be in the future
-- status should be "pending"
+- `sign-proof`
 
-### Send the on-chain payment (if required)
+Required flags:
 
-Use your preferred method (e.g. Ethers.js script, Remix, MetaMask) to send the required payment transaction. Make sure to use the same wallet corresponding to `VALUYA_PRIVATE_KEY` and to send the correct amount to the correct address as specified in the session details.
+- `--base <url>`
+- `--tenant-token <token>`
+- `--pk <privateKey>`
+- `--session-id <id>`
+- `--tx-hash <hash>`
 
-### Command (Sign Proof): `agent:sign-proof`
+Optional:
 
-```bash
-pnpm dist/bin.js agent:sign-proof \
-  --base <BASE> \
-  --tenant_token <TOKEN> \
-  --pk <PRIVATE_KEY> \
-  --session_id <SESSION_ID> \
-  --tx_hash <TX_HASH> \
-  --expires_at <EXPIRATION_ISO>
-```
+- `--rpc <url>`
 
-Output includes the signature and the full proof JSON that you can submit in the next step as well as the wallet address derived from the private key.
+Output includes:
 
-### Command (Submit Tx + Proof): `agent:submit-tx`
+- `wallet_address`
+- `signature`
+- `proof`
 
-```bash
-pnpm dist/bin.js agent:submit-tx \
-  --base <BASE> \
-  --tenant_token <TOKEN> \
-  --session-id <SESSION_ID> \
-  --wallet_address <WALLET_ADDRESS> \
-  --tx_hash <TX_HASH> \
-  --signature <SIGNATURE> \
-  --proof_json '<PROOF_JSON>'
-```
+### 3) Submit tx with signed proof
 
-### Command (Verify Session):
+- `submit-tx`
 
-```bash
-pnpm dist/bin.js agent:verify-session \
-  --base <BASE> \
-  --tenant_token <TOKEN> \
-  --session-id <SESSION_ID> \
-  --wallet_address <WALLET_ADDRESS>
-```
+Required flags:
 
-If confirmed, this will mint the mandate and return the mandate details in the response and the state changes to confimation. If the wallet address doesn't match the one recovered from the signature, you'll get a `wallet_mismatch` error.
+- `--base <url>`
+- `--tenant-token <token>`
+- `--pk <privateKey>`
+- `--session-id <id>`
+- `--tx-hash <hash>`
 
-Operational notes:
+Optional:
 
-Wallet allowlisting: Make sure the wallet you're using for payment is allowlisted in the Guard tenant. You can manage the allowlist via the Guard dashboard or API if your token has the necessary permissions.
+- `--rpc <url>`
 
-node dist/bin.js agent:allowlist-wallet \
- --base <BASE> \
- --principal_subject_type <TYPE> \
- --principal_subject_id <ID> \
- --wallet_address <WALLET_ADDRESS> \
- --tenant_id <TENANT_ID> \
- --project_id <PROJECT_ID> \
- --resource-prefix <RESOURCE_PREFIX> \
- --action add|remove
---tenant_token <TOKEN> \
- --wallet_address <WALLET_ADDRESS> \
+Note: CLI currently has no standalone `verify-session` command; full verify/mint is part of `agent:pay` and `agent:buy` flows.
 
-```
+## Product and admin helpers
 
-Notes:
-- allowlists can be scoped by tenant_id, project_id or global, and action (add/remove)
-- opitions for principal_subject_type/id allow you to specify a subject to wallet mapping if desired, otherwise it defaults to allowing that wallet for any subject (useful for testing)
-```
+### Product discovery/resolution
 
-node dist/bin.js agent:create-product \
- --base <BASE> \
- --tenant_token <TOKEN> \
- --description <DESCRIPTION> \
- --currency <CURRENCY> \
- --amount <AMOUNT> \
- --interval <INTERVAL> \
- --plan <PLAN> \  
- ``
+- `agent:products:list [--status ...] [--visibility ...] [--q ...] [--limit ...] [--cursor ...]`
+- `agent:product:resolve --product <ref>`
+- `agent:dry-run --product <ref>` (resolve without paying/invoking)
+- `agent:whoami`
+
+### Product authoring
+
+- `agent:product:types`
+- `agent:product:schema --type <type>`
+- `agent:product:prepare --file <draft.json> [--out <path>]`
+- `agent:product:create --file <product.json> [--prepare] [--subject <type:id>]`
+
+`agent:product:create` requires env:
+
+- `VALUYA_BASE`
+- `VALUYA_TENANT_TOKEN`
+- `VALUYA_PRIVATE_KEY`
+- `VALUYA_RPC_URL`
+
+### Allowlist
+
+- `allowlist:add --file <allowlist.json>` (preferred)
+- `allowlist:add --principal <type:id> --wallet <0x...> [--plan ...] [--resource-prefix ...] [--max-amount-cents ...] [--expires-at ...] [--status active|disabled]`
+
+Requires env:
+
+- `VALUYA_BASE`
+- `VALUYA_TENANT_TOKEN`
+
+## Troubleshooting shortcuts
+
+- `product_not_found`: run `agent:products:list --q <term>`, then retry with `slug:<slug>` or `id:<n>`.
+- `VALUYA_RPC_URL required for onchain payments in agent:buy`: set `VALUYA_RPC_URL` when payment method is onchain.
+- `invoke_body_missing`: backend returned `body_template` without concrete `body`; refresh resolve context and retry.
+- `principal_not_bound` on `agent:product:create`: use `--subject <type:id>` or bind principal to tenant token.
