@@ -152,6 +152,38 @@ paths:
                 $ref: '#/components/schemas/WhoamiResponse'
         default:
           $ref: '#/components/responses/Error'
+  /api/v2/agent/products:
+    get:
+      summary: List authored products for current agent
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      summary: Create product from prepared deterministic payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        default:
+          $ref: '#/components/responses/Error'
   /api/v2/agent/products/resolve:
     post:
       summary: Resolve product to purchase context

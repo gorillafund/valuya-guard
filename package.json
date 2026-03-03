@@ -6,11 +6,17 @@
     "examples/*"
   ],
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "typescript": "^5.6.0"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.scripts.json",
+    "test": "npm run test:gateway && npm run test:contract && npm run test:determinism",
     "test:contract": "node --test tests/contract/*.test.mjs",
     "test:gateway": "node --test docker/gateway/server.test.js",
+    "test:determinism": "node --test tests/protocol-determinism.test.mjs",
+    "protocol:snapshot": "node dist-scripts/generate-protocol-snapshot.js",
+    "protocol:check": "node dist-scripts/check-rfc-consistency.js",
     "validate:openapi": "node scripts/ci/validate-openapi.js",
     "validate:contract-drift": "node scripts/ci/check-contract-drift.js",
     "lint:markdown": "bash scripts/ci/lint-markdown.sh",
