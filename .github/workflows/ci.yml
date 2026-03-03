@@ -1,54 +1,37 @@
 name: CI
 
 on:
-  push:
   pull_request:
 
 jobs:
-  protocol-check:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
 
-      - name: Install dependencies
-        run: |
-          npm install --package-lock-only --ignore-scripts
-          npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Validate protocol source files
-        run: |
-          test -f openapi/v2.yaml
-          test -f docs/protocol/canonical.md
-          test -f RFC_AGENT_PRODUCT_AUTHORING_API.md
-
-      - name: Generate and verify protocol snapshot
-        run: npm run protocol:snapshot
-
-      - name: Check RFC/OpenAPI consistency
-        run: npm run protocol:check
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          node-version-file: .nvmrc
+          version: 8
 
       - name: Install dependencies
-        run: |
-          npm install --package-lock-only --ignore-scripts
-          npm ci
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build scripts
+        run: pnpm build
+
+      - name: Build protocol package
+        run: pnpm build:protocol
 
       - name: Run tests
-        run: npm run test
+        run: pnpm test
+
+      - name: Enforce protocol changeset
+        run: pnpm protocol:changeset-check

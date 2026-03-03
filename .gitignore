@@ -22,6 +22,7 @@ env.json
 # -------------------------------------------------
 node_modules/
 dist/
+dist-scripts/
 build/
 coverage/
 *.tsbuildinfo
@@ -38,6 +39,7 @@ yarn-error.log*
 .npmrc.*
 .npm-token
 **/.npm-token
+!.npmrc
 
 # -------------------------------------------------
 # AWS / SAM
