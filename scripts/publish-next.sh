@@ -19,19 +19,56 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-# Optional convenience: load token from local env file if present.
-if [[ -f "$ROOT_DIR/packages/core/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$ROOT_DIR/packages/core/.env"
-  set +a
-fi
+# Optional convenience: load env vars from one centralized file: repo root .env
+# Keep explicit shell exports higher priority by not overriding existing values.
+load_env_file() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || return 0
+
+  while IFS='=' read -r raw_key raw_val; do
+    [[ -n "$raw_key" ]] || continue
+    [[ "$raw_key" =~ ^[[:space:]]*# ]] && continue
+    local key
+    key="$(echo "$raw_key" | sed -E 's/^[[:space:]]*export[[:space:]]+//;s/[[:space:]]+$//')"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+    # Skip if already set in environment.
+    if [[ -n "${!key+x}" ]]; then
+      continue
+    fi
+
+    local val="${raw_val:-}"
+    val="${val%$'\r'}"
+    val="$(echo "$val" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//')"
+    if [[ "$val" =~ ^\".*\"$ ]] || [[ "$val" =~ ^\'.*\'$ ]]; then
+      val="${val:1:${#val}-2}"
+    fi
+    export "$key=$val"
+  done < "$env_file"
+}
+
+load_env_file "$ROOT_DIR/.env"
 
 TOKEN="${NPM_TOKEN:-${NODE_AUTH_TOKEN:-}}"
 if [[ -z "$TOKEN" ]]; then
-  echo "Missing NPM token. Set NPM_TOKEN or NODE_AUTH_TOKEN (or place it in packages/core/.env)."
+  echo "Missing NPM token. Set NPM_TOKEN (or NODE_AUTH_TOKEN) in shell or root .env."
   exit 1
 fi
+
+# Normalize accidental CR/LF and catch malformed token assignments.
+TOKEN="$(printf '%s' "$TOKEN" | tr -d '\r\n')"
+if [[ "$TOKEN" == NPM_TOKEN=* ]] || [[ "$TOKEN" == NODE_AUTH_TOKEN=* ]]; then
+  echo "Malformed token value detected. Set only the raw token string, not KEY=value."
+  exit 1
+fi
+if [[ "$TOKEN" =~ [[:space:]] ]]; then
+  echo "Token contains whitespace. Remove spaces/newlines and try again."
+  exit 1
+fi
+
+# Ensure project .npmrc env substitution always resolves, even if only one var was provided.
+export NODE_AUTH_TOKEN="${NODE_AUTH_TOKEN:-$TOKEN}"
+export NPM_TOKEN="${NPM_TOKEN:-$TOKEN}"
 
 TMP_NPMRC="$(mktemp)"
 trap 'rm -f "$TMP_NPMRC"' EXIT
@@ -56,6 +93,7 @@ publish_pkg() {
 
 # Dependency order matters:
 publish_pkg "@valuya/core"
+publish_pkg "@valuya/protocol"
 publish_pkg "@valuya/agent"
 publish_pkg "@valuya/agentokratia-signer"
 publish_pkg "@valuya/telegram-bot"

@@ -24,13 +24,34 @@ if ! python3 -c "import twine" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Optional convenience: load token from local env file if present.
-if [[ -f "$ROOT_DIR/packages/core/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$ROOT_DIR/packages/core/.env"
-  set +a
-fi
+# Optional convenience: load env vars from one centralized file: repo root .env
+# Keep explicit shell exports higher priority by not overriding existing values.
+load_env_file() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || return 0
+
+  while IFS='=' read -r raw_key raw_val; do
+    [[ -n "$raw_key" ]] || continue
+    [[ "$raw_key" =~ ^[[:space:]]*# ]] && continue
+    local key
+    key="$(echo "$raw_key" | sed -E 's/^[[:space:]]*export[[:space:]]+//;s/[[:space:]]+$//')"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+    if [[ -n "${!key+x}" ]]; then
+      continue
+    fi
+
+    local val="${raw_val:-}"
+    val="${val%$'\r'}"
+    val="$(echo "$val" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//')"
+    if [[ "$val" =~ ^\".*\"$ ]] || [[ "$val" =~ ^\'.*\'$ ]]; then
+      val="${val:1:${#val}-2}"
+    fi
+    export "$key=$val"
+  done < "$env_file"
+}
+
+load_env_file "$ROOT_DIR/.env"
 
 TOKEN="${PYPI_TOKEN:-${TWINE_PASSWORD:-}}"
 if [[ -z "$TOKEN" ]]; then
