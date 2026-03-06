@@ -16,10 +16,17 @@ export async function createCheckoutSession(args: {
   origin?: string
   quantity_requested?: number
 }): Promise<AgentCheckoutSessionResponseV2> {
+  const subjectId = `${args.subject.type}:${args.subject.id}`
   return apiJson<AgentCheckoutSessionResponseV2>({
     cfg: args.cfg,
     method: "POST",
     path: ROUTES.checkoutSessionsCreate,
+    headers: {
+      Accept: "application/json",
+      "X-Valuya-Subject-Id": subjectId,
+      "X-Valuya-Subject-Type": args.subject.type,
+      "X-Valuya-Subject-Id-Raw": args.subject.id,
+    },
     body: {
       resource: args.resource,
       plan: args.plan,

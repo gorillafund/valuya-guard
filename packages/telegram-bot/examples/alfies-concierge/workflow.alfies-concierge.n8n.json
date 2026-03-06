@@ -1,0 +1,137 @@
+{
+  "name": "Alfies Concierge (No Payment In n8n)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "alfies/concierge",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-700, 0],
+      "webhookId": "alfies-concierge"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            { "name": "action", "value": "={{ $json.body?.action || 'recipe' }}" },
+            { "name": "orderId", "value": "={{ $json.body?.orderId || ('ord_' + $now.toMillis()) }}" },
+            { "name": "message", "value": "={{ $json.body?.message || '' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract",
+      "name": "Extract",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [-480, 0]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
+        "rules": [
+          { "operation": "equal", "value2": "recipe" },
+          { "operation": "equal", "value2": "alt" },
+          { "operation": "equal", "value2": "confirm" },
+          { "operation": "equal", "value2": "cancel" }
+        ]
+      },
+      "id": "switch",
+      "name": "Switch Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [-260, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orderId = $node['Extract'].json.orderId;\nconst msg = String($node['Extract'].json.message || 'Chef recommendation');\n\nreturn {\n  statusCode: 200,\n  body: {\n    ok: true,\n    orderId,\n    telegram: {\n      text: `Recipe: ${msg}\\n\\nMock cart:\\n- Pasta 500g\\n- Tomato sauce\\n- Parmesan\\n\\nReady to place this order?`,\n      keyboard: [\n        [{ text: '✅ Confirm', callback_data: `confirm:${orderId}` }],\n        [{ text: '🔁 Alternative', callback_data: `alt:${orderId}` }],\n        [{ text: '❌ Cancel', callback_data: `cancel:${orderId}` }]\n      ]\n    }\n  }\n};"
+      },
+      "id": "recipe",
+      "name": "Recipe/Alt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-20, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orderId = $node['Extract'].json.orderId;\nreturn {\n  statusCode: 200,\n  body: {\n    ok: true,\n    orderId,\n    telegram: {\n      text: 'Order confirmed. Packing now. ETA 35-50 minutes.'\n    }\n  }\n};"
+      },
+      "id": "confirm",
+      "name": "Confirm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-20, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orderId = $node['Extract'].json.orderId;\nreturn {\n  statusCode: 200,\n  body: {\n    ok: true,\n    orderId,\n    telegram: {\n      text: 'Order canceled. Send another recipe request anytime.'\n    }\n  }\n};"
+      },
+      "id": "cancel",
+      "name": "Cancel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-20, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  statusCode: 400,\n  body: { ok: false, error: 'unknown_action' }\n};"
+      },
+      "id": "unknown",
+      "name": "Unknown Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-20, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode }}",
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json; charset=utf-8" },
+              { "name": "Cache-Control", "value": "no-store" }
+            ]
+          }
+        }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [220, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Extract", "type": "main", "index": 0 }]] },
+    "Extract": { "main": [[{ "node": "Switch Action", "type": "main", "index": 0 }]] },
+    "Switch Action": {
+      "main": [
+        [{ "node": "Recipe/Alt", "type": "main", "index": 0 }],
+        [{ "node": "Recipe/Alt", "type": "main", "index": 0 }],
+        [{ "node": "Confirm", "type": "main", "index": 0 }],
+        [{ "node": "Cancel", "type": "main", "index": 0 }],
+        [{ "node": "Unknown Action", "type": "main", "index": 0 }]
+      ]
+    },
+    "Recipe/Alt": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] },
+    "Confirm": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] },
+    "Cancel": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] },
+    "Unknown Action": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  }
+}

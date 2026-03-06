@@ -1,0 +1,116 @@
+{
+  "conversations": {
+    "whatsapp: 436601234567": {
+      "subjectId": "whatsapp: 436601234567",
+      "orderId": "ord_1772801031622_79c438",
+      "lastRecipe": {
+        "title": "Traditional Spanish Paella"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-OLI-001",
+            "name": "Oliven grün 200g",
+            "qty": 1,
+            "unit_price_cents": 279,
+            "line_total_cents": 279,
+            "matched_to": "olive oil"
+          }
+        ],
+        "total_cents": 279,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-06T12:44:04.254Z"
+    },
+    "whatsapp:+4915757203919": {
+      "subjectId": "whatsapp:+4915757203919",
+      "orderId": "ord_1772803323130_c724d1",
+      "lastRecipe": {
+        "title": "Traditional Spanish Paella"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-OLI-001",
+            "name": "Oliven grün 200g",
+            "qty": 1,
+            "unit_price_cents": 279,
+            "line_total_cents": 279,
+            "matched_to": "olive oil"
+          },
+          {
+            "sku": "ALF-PAP-001",
+            "name": "Paprika rot (2 Stk)",
+            "qty": 1,
+            "unit_price_cents": 349,
+            "line_total_cents": 349,
+            "matched_to": "paprika"
+          }
+        ],
+        "total_cents": 628,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-06T13:22:14.896Z"
+    },
+    "whatsapp:4915757203919": {
+      "subjectId": "whatsapp:4915757203919",
+      "orderId": "ord_1772804385034_99d7ef",
+      "lastRecipe": {
+        "title": "Traditional Spanish Paella"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-OLI-001",
+            "name": "Oliven grün 200g",
+            "qty": 1,
+            "unit_price_cents": 279,
+            "line_total_cents": 279,
+            "matched_to": "olive oil"
+          },
+          {
+            "sku": "ALF-PAP-001",
+            "name": "Paprika rot (2 Stk)",
+            "qty": 1,
+            "unit_price_cents": 349,
+            "line_total_cents": 349,
+            "matched_to": "smoked paprika"
+          }
+        ],
+        "total_cents": 628,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-06T13:39:53.257Z"
+    },
+    "user:whatsapp_4915757203919": {
+      "subjectId": "user:whatsapp_4915757203919",
+      "orderId": "ord_1772838635483_260a07",
+      "lastRecipe": {
+        "title": "Gemüsereis"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-PAP-001",
+            "name": "Paprika rot (2 Stk)",
+            "qty": 1,
+            "unit_price_cents": 349,
+            "line_total_cents": 349,
+            "matched_to": "carrots"
+          },
+          {
+            "sku": "ALF-OLI-001",
+            "name": "Oliven grün 200g",
+            "qty": 1,
+            "unit_price_cents": 279,
+            "line_total_cents": 279,
+            "matched_to": "olive oil"
+          }
+        ],
+        "total_cents": 628,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-06T23:11:02.515Z"
+    }
+  }
+}

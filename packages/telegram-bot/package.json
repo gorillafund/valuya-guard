@@ -5,10 +5,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "start:bot": "node --env-file=.env dist/app.js",
+    "build:alfies": "tsc -p examples/alfies-concierge/tsconfig.json",
+    "start:alfies": "node examples/alfies-concierge/dist/telegram-bot/examples/alfies-concierge/bot.js"
   },
   "dependencies": {
-    "@valuya/core": "workspace:^"
+    "@valuya/core": "workspace:^",
+    "@valuya/agent": "workspace:^",
+    "dotenv": "^16.6.1"
   },
   "devDependencies": {
     "@types/node": "^25.0.10"

@@ -1,0 +1,20 @@
+{
+  "name": "alfies-concierge-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "link:workspace": "mkdir -p node_modules/@valuya && ln -sfn ../../../../../agent node_modules/@valuya/agent",
+    "prebuild": "npm run link:workspace",
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test tests/orderBackend.test.mjs",
+    "prestart": "npm run link:workspace",
+    "start": "node dist/telegram-bot/examples/alfies-concierge/bot.js"
+  },
+  "dependencies": {
+    "@valuya/agent": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "typescript": "^5.9.2"
+  }
+}

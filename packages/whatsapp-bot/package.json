@@ -1,0 +1,22 @@
+{
+  "name": "@valuya/whatsapp-bot",
+  "version": "0.2.0-beta.1",
+  "type": "module",
+  "main": "dist/whatsapp-bot/src/server.js",
+  "types": "dist/whatsapp-bot/src/server.d.ts",
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "start": "node --env-file=.env dist/whatsapp-bot/src/server.js"
+  },
+  "dependencies": {
+    "@valuya/agent": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "license": "MIT"
+}
