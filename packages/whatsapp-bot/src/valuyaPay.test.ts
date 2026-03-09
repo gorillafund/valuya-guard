@@ -12,6 +12,7 @@ test("linked user payment uses guard subject + linked wallet for delegated reque
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: false } }, // entitlement precheck
     { status: 200, body: { ok: true, order: { order_id: "ord_srv_1" } } }, // marketplace/orders
     { status: 200, body: { ok: true, state: "approved" } }, // delegated
     { status: 200, body: { active: true } }, // entitlement after
@@ -79,6 +80,7 @@ test("delegated payment prefers whoami principal subject when available", async 
         },
       },
     },
+    { status: 200, body: { active: false } }, // entitlement precheck
     { status: 200, body: { ok: true, order: { order_id: "ord_srv_whoami" } } },
     { status: 200, body: { ok: true, state: "approved" } },
     { status: 200, body: { active: true } },
@@ -123,6 +125,7 @@ test("delegated payment marketplace order includes cart items and skips checkout
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } },
+    { status: 200, body: { active: false } }, // entitlement precheck
     { status: 200, body: { ok: true, order: { order_id: "ord_srv_1" } } },
     { status: 200, body: { ok: true, state: "approved" } },
     { status: 200, body: { active: true } },
@@ -167,6 +170,53 @@ test("delegated payment marketplace order includes cart items and skips checkout
   })
 })
 
+test("active entitlement short-circuits repeat payment attempts after checkout", async () => {
+  const requests: Array<{ url: string; init: RequestInit | undefined }> = []
+  const responses: MockResponse[] = [
+    { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: true } }, // entitlement precheck
+  ]
+
+  await withMockFetch(responses, requests, async () => {
+    const client = new ValuyaPayClient({
+      cfg: cfg(),
+      backendBaseUrl: "https://backend.example",
+      backendToken: "backend-token",
+      resource: "whatsapp:bot:test:recipe",
+      plan: "standard",
+      marketplaceProductId: 47,
+      entitlementPollDelaysMs: [0],
+    })
+
+    const result = await client.ensurePaid({
+      subject: { type: "whatsapp", id: "+49123456789" },
+      orderId: "ord_repeat_after_checkout",
+      amountCents: 827,
+      currency: "EUR",
+      actorType: "agent",
+      channel: "whatsapp",
+      protocolSubjectHeader: "user:17",
+      guardSubjectId: "16",
+      linkedWalletAddress: "0x563eFeff9fb7D6FD0243E5b9Cf620690b69058A7",
+      cart: [{ sku: "paella", name: "Paella", qty: 1, unit_price_cents: 827 }],
+    })
+
+    assert.equal(result.ok, true)
+    assert.equal(
+      requests.some((r) => r.url.includes("/api/marketplace/orders")),
+      false,
+    )
+    assert.equal(
+      requests.some((r) => r.url.includes("/api/guard/payments/request")),
+      false,
+    )
+    const entitlementCall = requests.find((r) => r.url.includes("/api/v2/entitlements"))
+    assert.ok(entitlementCall)
+    const headers = new Headers(entitlementCall?.init?.headers)
+    assert.equal(headers.get("x-valuya-subject-id"), "user:17")
+  })
+})
+
 test("missing linked wallet fails safely and never calls delegated payment", async () => {
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
@@ -207,6 +257,7 @@ test("requires_stepup creates marketplace order with product/resource/plan", asy
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: false } }, // entitlement precheck
     {
       status: 200,
       body: {
@@ -269,6 +320,7 @@ test("payment_estimation_failed returns topup path and does not create checkout 
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: false } }, // entitlement precheck
     { status: 200, body: { ok: true, order: { order_id: "ord_srv_topup" } } }, // marketplace order
     {
       status: 422,
@@ -324,6 +376,7 @@ test("pending_settlement polls entitlement before failing", async () => {
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: false } }, // entitlement precheck
     { status: 200, body: { ok: true, order: { order_id: "ord_srv_pending" } } }, // marketplace order
     { status: 200, body: { ok: true, session: { state: "pending_settlement" } } }, // delegated
     { status: 200, body: { active: false } }, // poll 1
@@ -347,7 +400,7 @@ test("pending_settlement polls entitlement before failing", async () => {
     })
 
     const result = await client.ensurePaid({
-      subject: { type: "user", id: "17" },
+      subject: { type: "whatsapp", id: "+49123456789" },
       orderId: "ord_pending",
       amountCents: 1,
       currency: "EUR",
@@ -361,6 +414,13 @@ test("pending_settlement polls entitlement before failing", async () => {
 
     assert.equal(result.ok, true)
     assert.deepEqual(sleeps, [4, 8])
+    const entitlementCalls = requests.filter((r) => r.url.includes("/api/v2/entitlements"))
+    assert.equal(entitlementCalls.length, 4)
+    for (const call of entitlementCalls) {
+      const headers = new Headers(call.init?.headers)
+      assert.equal(headers.get("x-valuya-subject-id"), "user:17")
+      assert.equal(headers.get("x-valuya-subject"), "user:17")
+    }
   })
 })
 
@@ -368,6 +428,7 @@ test("pending_settlement timeout stays pending instead of surfacing generic fail
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: false } }, // entitlement precheck
     { status: 200, body: { ok: true, order: { order_id: "ord_srv_pending_timeout" } } }, // marketplace order
     { status: 200, body: { ok: true, session: { state: "pending_settlement" } } }, // delegated
     { status: 200, body: { active: false } }, // poll 1
@@ -417,6 +478,7 @@ test("session entitled is treated as immediate success", async () => {
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: false } }, // entitlement precheck
     { status: 200, body: { ok: true, order: { order_id: "ord_srv_entitled" } } }, // marketplace order
     { status: 200, body: { ok: true, session: { state: "entitled" } } }, // delegated
   ]
@@ -447,7 +509,7 @@ test("session entitled is treated as immediate success", async () => {
 
     assert.equal(result.ok, true)
     const entitlementCalls = requests.filter((r) => r.url.includes("/api/v2/entitlements"))
-    assert.equal(entitlementCalls.length, 0)
+    assert.equal(entitlementCalls.length, 1)
   })
 })
 
@@ -455,6 +517,7 @@ test("delegated autopay fails early when marketplace product_id missing", async 
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const responses: MockResponse[] = [
     { status: 200, body: { ok: true } }, // whoami
+    { status: 200, body: { active: false } }, // entitlement precheck
   ]
 
   await withMockFetch(responses, requests, async () => {

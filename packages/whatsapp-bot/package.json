@@ -6,6 +6,8 @@
   "types": "dist/whatsapp-bot/src/server.d.ts",
   "scripts": {
     "build": "pnpm --filter @valuya/whatsapp-channel-access build && rm -rf dist && tsc -p tsconfig.json",
+    "import:alfies-catalog": "pnpm run build && node dist/whatsapp-bot/src/alfiesCatalogImport.js",
+    "normalize:alfies-catalog": "pnpm run build && node dist/whatsapp-bot/src/alfiesCatalogNormalize.js",
     "start": "node --env-file=.env dist/whatsapp-bot/src/server.js",
     "test": "pnpm run build && node --test dist/whatsapp-bot/src/*.test.js"
   },

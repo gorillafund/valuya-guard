@@ -30,6 +30,7 @@ type EntitlementDecision = {
 export type PaymentSuccess = {
   ok: true
   whoami: WhoamiResponse
+  valuyaOrderId?: string
   txHash?: string
   chainId?: number
 }
@@ -180,6 +181,44 @@ export class ValuyaPayClient {
     }
 
     try {
+      this.log("payment_trace", buildPaymentTrace({
+        stage: "ensure_paid_start",
+        localOrderId: args.orderId,
+        protocolSubjectHeader,
+        resource: this.resource,
+        plan: this.plan,
+        amountCents: normalizedCart?.total_cents,
+        currency: normalizedCart?.currency || args.currency || "EUR",
+        guardSubjectId,
+        guardSubjectType,
+        guardSubjectExternalId,
+      }))
+
+      const before = await this.getEntitlement(protocolSubjectHeader)
+      this.log("payment_trace", buildPaymentTrace({
+        stage: "entitlement_precheck",
+        localOrderId: args.orderId,
+        protocolSubjectHeader,
+        resource: this.resource,
+        plan: this.plan,
+        amountCents: normalizedCart?.total_cents,
+        currency: normalizedCart?.currency || args.currency || "EUR",
+        guardSubjectId,
+        guardSubjectType,
+        guardSubjectExternalId,
+        entitlementActive: before.active,
+        entitlementReason: before.reason,
+      }))
+      if (before.active) {
+        this.log("payment_decision", {
+          order_id: args.orderId,
+          action: "autopay_success",
+          reason: "entitlement_already_active",
+          subject_header: protocolSubjectHeader,
+        })
+        return { ok: true, whoami: who }
+      }
+
       this.log("payment_flow_branch", {
         order_id: args.orderId,
         flow_branch: "delegated_guard_autopay_path",
@@ -201,6 +240,19 @@ export class ValuyaPayClient {
         cart: normalizedCart,
       })
       marketplaceOrderId = marketplaceOrder.orderId
+      this.log("payment_trace", buildPaymentTrace({
+        stage: "marketplace_order_created",
+        localOrderId: args.orderId,
+        valuyaOrderId: marketplaceOrderId,
+        protocolSubjectHeader,
+        resource: this.resource,
+        plan: this.plan,
+        amountCents: normalizedCart?.total_cents,
+        currency: normalizedCart?.currency || args.currency || "EUR",
+        guardSubjectId,
+        guardSubjectType,
+        guardSubjectExternalId,
+      }))
 
       const idempotencyKey = `wa-delegated:${args.orderId}:v1`
       const delegated = await this.requestDelegatedPayment({
@@ -224,6 +276,20 @@ export class ValuyaPayClient {
         readString(delegatedSession?.state) ||
         readString(delegatedRecord?.state) ||
         ""
+      this.log("payment_trace", buildPaymentTrace({
+        stage: "delegated_payment_response",
+        localOrderId: args.orderId,
+        valuyaOrderId: marketplaceOrderId,
+        protocolSubjectHeader,
+        resource: this.resource,
+        plan: this.plan,
+        amountCents: normalizedCart?.total_cents,
+        currency: normalizedCart?.currency || args.currency || "EUR",
+        guardSubjectId,
+        guardSubjectType,
+        guardSubjectExternalId,
+        delegatedState,
+      }))
       const requiresStepup =
         delegatedSession?.requires_stepup === true ||
         delegatedRecord?.requires_stepup === true
@@ -273,10 +339,10 @@ export class ValuyaPayClient {
           action: "autopay_success",
           reason: "session_entitled",
         })
-        return { ok: true, whoami: who }
+        return { ok: true, whoami: who, valuyaOrderId: marketplaceOrderId }
       }
 
-      const after = await this.pollEntitlement(subject, {
+      const after = await this.pollEntitlement({
         orderId: args.orderId,
         delegatedState,
         protocolSubjectHeader,
@@ -287,7 +353,24 @@ export class ValuyaPayClient {
           action: "autopay_success",
           reason: "entitlement_active",
         })
-        return { ok: true, whoami: who }
+        return { ok: true, whoami: who, valuyaOrderId: marketplaceOrderId }
+      }
+      if (String(after.reason || "").toLowerCase() === "product_not_registered") {
+        this.log("payment_decision", {
+          order_id: args.orderId,
+          action: "retryable_failure",
+          reason: "product_not_registered",
+          session_state: delegatedState,
+          subject_header: protocolSubjectHeader,
+          resource: this.resource,
+          plan: this.plan,
+        })
+        return {
+          ok: false,
+          whoami: who,
+          reason: "product_not_registered",
+          valuyaOrderId: marketplaceOrderId,
+        }
       }
       if (delegatedState.toLowerCase() === "pending_settlement") {
         this.log("payment_decision", {
@@ -440,10 +523,11 @@ export class ValuyaPayClient {
     return { orderPayload: payload, responseBody }
   }
 
-  private async pollEntitlement(
-    subject: AgentSubject,
-    args: { orderId: string; delegatedState: string; protocolSubjectHeader: string },
-  ): Promise<EntitlementDecision> {
+  private async pollEntitlement(args: {
+    orderId: string
+    delegatedState: string
+    protocolSubjectHeader: string
+  }): Promise<EntitlementDecision> {
     let last: EntitlementDecision = { active: false, reason: "inactive" }
     let elapsedMs = 0
     for (let i = 0; i < this.entitlementPollDelaysMs.length; i++) {
@@ -462,7 +546,7 @@ export class ValuyaPayClient {
         await this.sleepFn(delay)
         elapsedMs += delay
       }
-      last = await this.getEntitlement(subject)
+      last = await this.getEntitlement(args.protocolSubjectHeader)
       this.log("entitlement_recheck", {
         order_id: args.orderId,
         poll_attempt: i + 1,
@@ -722,8 +806,15 @@ export class ValuyaPayClient {
     return body
   }
 
-  private async getEntitlement(subject: AgentSubject): Promise<EntitlementDecision> {
-    const subjectId = `${subject.type}:${subject.id}`
+  private async getEntitlement(protocolSubjectHeader: string): Promise<EntitlementDecision> {
+    const subjectId = normalizeCanonicalSubjectId(protocolSubjectHeader)
+    const subject = parseSubjectId(subjectId)
+    this.log("payment_trace", buildPaymentTrace({
+      stage: "entitlement_request",
+      protocolSubjectHeader: subjectId,
+      resource: this.resource,
+      plan: this.plan,
+    }))
     return apiJson<EntitlementDecision>({
       cfg: this.cfg,
       method: "GET",
@@ -835,6 +926,42 @@ export class ValuyaPayClient {
 
 }
 
+function buildPaymentTrace(args: {
+  stage: string
+  localOrderId?: string
+  valuyaOrderId?: string
+  protocolSubjectHeader: string
+  resource: string
+  plan: string
+  amountCents?: number
+  currency?: string
+  guardSubjectId?: string
+  guardSubjectType?: string
+  guardSubjectExternalId?: string
+  delegatedState?: string
+  entitlementActive?: boolean
+  entitlementReason?: string
+}): Record<string, unknown> {
+  return {
+    trace_kind: "payment_correlation",
+    stage: args.stage,
+    local_order_id: args.localOrderId || null,
+    valuya_order_id: args.valuyaOrderId || null,
+    protocol_subject_header: args.protocolSubjectHeader || null,
+    resource: args.resource,
+    plan: args.plan,
+    amount_cents: typeof args.amountCents === "number" ? args.amountCents : null,
+    currency: args.currency || null,
+    guard_subject_id: args.guardSubjectId || null,
+    guard_subject_type: args.guardSubjectType || null,
+    guard_subject_external_id: args.guardSubjectExternalId || null,
+    delegated_state: args.delegatedState || null,
+    entitlement_active:
+      typeof args.entitlementActive === "boolean" ? args.entitlementActive : null,
+    entitlement_reason: args.entitlementReason || null,
+  }
+}
+
 function normalizeCanonicalSubjectId(subjectId: string): string {
   const value = String(subjectId || "").trim()
   const idx = value.indexOf(":")
@@ -880,6 +1007,9 @@ class DelegatedPaymentError extends Error {
 
 function classifyDelegatedPaymentFailure(error: DelegatedPaymentError): PaymentDecisionAction {
   const marker = `${error.code} ${error.state} ${JSON.stringify(error.body).toLowerCase()}`
+  if (marker.includes("product_not_registered")) {
+    return "retryable_failure"
+  }
   if (marker.includes("requires_stepup") || marker.includes("payment_required")) {
     return "checkout_required"
   }

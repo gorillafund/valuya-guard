@@ -1,0 +1,183 @@
+{
+  "conversations": {
+    "whatsapp: 436601234567": {
+      "subjectId": "whatsapp: 436601234567",
+      "orderId": "ord_1772801031622_79c438",
+      "lastRecipe": {
+        "title": "Traditional Spanish Paella"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-OLI-001",
+            "name": "Oliven grün 200g",
+            "qty": 1,
+            "unit_price_cents": 279,
+            "line_total_cents": 279,
+            "matched_to": "olive oil"
+          }
+        ],
+        "total_cents": 279,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-06T12:44:04.254Z"
+    },
+    "whatsapp:+4915757203919": {
+      "subjectId": "whatsapp:+4915757203919",
+      "orderId": "ord_1772803323130_c724d1",
+      "lastRecipe": {
+        "title": "Traditional Spanish Paella"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-OLI-001",
+            "name": "Oliven grün 200g",
+            "qty": 1,
+            "unit_price_cents": 279,
+            "line_total_cents": 279,
+            "matched_to": "olive oil"
+          },
+          {
+            "sku": "ALF-PAP-001",
+            "name": "Paprika rot (2 Stk)",
+            "qty": 1,
+            "unit_price_cents": 349,
+            "line_total_cents": 349,
+            "matched_to": "paprika"
+          }
+        ],
+        "total_cents": 628,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-06T13:22:14.896Z"
+    },
+    "whatsapp:4915757203919": {
+      "subjectId": "whatsapp:4915757203919",
+      "orderId": "ord_1772804385034_99d7ef",
+      "lastRecipe": {
+        "title": "Traditional Spanish Paella"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-OLI-001",
+            "name": "Oliven grün 200g",
+            "qty": 1,
+            "unit_price_cents": 279,
+            "line_total_cents": 279,
+            "matched_to": "olive oil"
+          },
+          {
+            "sku": "ALF-PAP-001",
+            "name": "Paprika rot (2 Stk)",
+            "qty": 1,
+            "unit_price_cents": 349,
+            "line_total_cents": 349,
+            "matched_to": "smoked paprika"
+          }
+        ],
+        "total_cents": 628,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-06T13:39:53.257Z"
+    },
+    "user:whatsapp_4915757203919": {
+      "subjectId": "user:whatsapp_4915757203919",
+      "orderId": "ord_1773066957731_c7b420",
+      "lastRecipe": {
+        "title": "Order based on Gurke 1kg"
+      },
+      "lastCart": {
+        "items": [
+          {
+            "sku": "ALF-TEST-001",
+            "name": "Gurke 1kg",
+            "qty": 1,
+            "unit_price_cents": 1
+          }
+        ],
+        "total_cents": 1,
+        "currency": "EUR"
+      },
+      "updatedAt": "2026-03-09T14:36:15.847Z"
+    }
+  },
+  "channelLinks": {
+    "4915757203919": {
+      "whatsapp_user_id": "4915757203919",
+      "whatsapp_profile_name": "Jakob Sievers",
+      "tenant_id": "19",
+      "channel_app_id": "whatsapp_main",
+      "valuya_subject_id": "16",
+      "valuya_subject_type": "privy_user",
+      "valuya_subject_external_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "valuya_privy_user_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "valuya_linked_wallet_address": "0x563efeff9fb7d6fd0243e5b9cf620690b69058a7",
+      "valuya_privy_wallet_id": "tvngkcvyt1zjwr3c1vzlvbps",
+      "valuya_protocol_subject_type": "user",
+      "valuya_protocol_subject_id": "17",
+      "valuya_protocol_subject_header": "user:17",
+      "status": "linked",
+      "linked_at": "2026-03-08T22:29:43.962Z",
+      "meta": {
+        "guard_link_id": "2"
+      },
+      "updated_at": "2026-03-08T22:29:43.966Z"
+    }
+  },
+  "marketplaceOrderLinks": {
+    "ord_1772994671655_10f8ff": {
+      "local_order_id": "ord_1772994671655_10f8ff",
+      "valuya_order_id": "ord_01kk7bxeqmxhqbm5mee1nd0rbk",
+      "checkout_url": "https://pay.gorilla.build/checkout/orders/aco_bvJk1qB46H9HTPRur5vOJZm640L7bUDluDTeRYeR",
+      "guard_subject_id": "16",
+      "guard_subject_type": "privy_user",
+      "guard_subject_external_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "protocol_subject_header": "user:17",
+      "amount_cents": 279,
+      "currency": "EUR",
+      "status": "awaiting_checkout",
+      "updated_at": "2026-03-08T18:38:52.219Z"
+    },
+    "ord_1772997538365_a40238": {
+      "local_order_id": "ord_1772997538365_a40238",
+      "valuya_order_id": "ord_01kk7e7fm0sr5pfbqmv1b4mwx9",
+      "checkout_url": "https://pay.gorilla.build/checkout/orders/aco_4h6ZwiNpjc0EroujXuHfZ5ovAjhNe499Sq5aZUpY",
+      "guard_subject_id": "16",
+      "guard_subject_type": "privy_user",
+      "guard_subject_external_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "protocol_subject_header": "user:17",
+      "amount_cents": 279,
+      "currency": "EUR",
+      "status": "awaiting_checkout",
+      "updated_at": "2026-03-08T19:19:18.026Z"
+    },
+    "ord_1772998298921_c887fc": {
+      "local_order_id": "ord_1772998298921_c887fc",
+      "valuya_order_id": "ord_01kk7ez6zeybn3bns075hb90yb",
+      "checkout_url": "https://pay.gorilla.build/checkout/orders/aco_WQYofL0YoIYOMhqlWv6doCzpfBvt3aFxDcnKVPIA",
+      "guard_subject_id": "16",
+      "guard_subject_type": "privy_user",
+      "guard_subject_external_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "protocol_subject_header": "user:17",
+      "amount_cents": 628,
+      "currency": "EUR",
+      "status": "awaiting_checkout",
+      "updated_at": "2026-03-08T19:32:15.537Z"
+    },
+    "ord_1772998862361_0f36b6": {
+      "local_order_id": "ord_1772998862361_0f36b6",
+      "valuya_order_id": "ord_01kk7ffp4tgrrr4erdhw17d7m3",
+      "checkout_url": "https://pay.gorilla.build/checkout/orders/aco_RIkB9O5CBjpwfZIkmYRvKGiddp65HlRGdsl509YI",
+      "guard_subject_id": "16",
+      "guard_subject_type": "privy_user",
+      "guard_subject_external_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "protocol_subject_header": "user:17",
+      "amount_cents": 1,
+      "currency": "EUR",
+      "status": "awaiting_checkout",
+      "updated_at": "2026-03-08T19:41:15.354Z"
+    }
+  }
+}
