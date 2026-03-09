@@ -5,11 +5,13 @@
   "main": "dist/whatsapp-bot/src/server.js",
   "types": "dist/whatsapp-bot/src/server.d.ts",
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
-    "start": "node --env-file=.env dist/whatsapp-bot/src/server.js"
+    "build": "pnpm --filter @valuya/whatsapp-channel-access build && rm -rf dist && tsc -p tsconfig.json",
+    "start": "node --env-file=.env dist/whatsapp-bot/src/server.js",
+    "test": "pnpm run build && node --test dist/whatsapp-bot/src/*.test.js"
   },
   "dependencies": {
-    "@valuya/agent": "workspace:^"
+    "@valuya/agent": "workspace:^",
+    "@valuya/whatsapp-channel-access": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^25.0.10"

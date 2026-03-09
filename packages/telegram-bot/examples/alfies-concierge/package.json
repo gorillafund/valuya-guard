@@ -6,7 +6,7 @@
     "link:workspace": "mkdir -p node_modules/@valuya && ln -sfn ../../../../../agent node_modules/@valuya/agent",
     "prebuild": "npm run link:workspace",
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test tests/orderBackend.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "prestart": "npm run link:workspace",
     "start": "node dist/telegram-bot/examples/alfies-concierge/bot.js"
   },

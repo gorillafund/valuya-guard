@@ -4,6 +4,7 @@ export type TwilioInboundMessage = {
   from: string
   body: string
   messageSid: string
+  profileName?: string
   params: URLSearchParams
 }
 
@@ -13,6 +14,7 @@ export function parseTwilioForm(rawBody: string): TwilioInboundMessage {
     from: String(params.get("From") ?? "").trim(),
     body: String(params.get("Body") ?? "").trim(),
     messageSid: String(params.get("MessageSid") ?? "").trim(),
+    profileName: String(params.get("ProfileName") ?? "").trim() || undefined,
     params,
   }
 }

@@ -1,0 +1,22 @@
+{
+  "channelLinks": {
+    "546925008": {
+      "telegram_user_id": "546925008",
+      "telegram_username": "JSievers",
+      "tenant_id": "19",
+      "channel_app_id": "telegram_main",
+      "valuya_subject_id": "16",
+      "valuya_subject_type": "privy_user",
+      "valuya_subject_external_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "valuya_privy_user_id": "did:privy:cmm56dn67021s0cl5akzuunrw",
+      "valuya_linked_wallet_address": "0x563efeff9fb7d6fd0243e5b9cf620690b69058a7",
+      "valuya_privy_wallet_id": "tvngkcvyt1zjwr3c1vzlvbps",
+      "valuya_protocol_subject_type": "user",
+      "valuya_protocol_subject_id": "17",
+      "valuya_protocol_subject_header": "user:17",
+      "status": "linked",
+      "linked_at": "2026-03-08T22:59:28.046Z",
+      "updated_at": "2026-03-08T22:59:28.046Z"
+    }
+  }
+}

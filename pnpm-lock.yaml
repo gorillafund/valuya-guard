@@ -186,6 +186,15 @@ importers:
       '@valuya/agent':
         specifier: workspace:^
         version: link:../agent
+      '@valuya/whatsapp-channel-access':
+        specifier: workspace:^
+        version: link:../whatsapp-channel-access
+    devDependencies:
+      '@types/node':
+        specifier: ^25.0.10
+        version: 25.3.3
+
+  packages/whatsapp-channel-access:
     devDependencies:
       '@types/node':
         specifier: ^25.0.10

@@ -4,17 +4,31 @@ import { resolve } from "node:path"
 import type { AgentConfig, AgentSubject } from "@valuya/agent"
 import {
   apiJson,
-  createProvider,
   isValuyaApiError,
-  makeEthersSigner,
-  purchase,
-  sendErc20Transfer,
 } from "@valuya/agent"
 import {
   buildOrderPayload,
   sendOrderToBackendRequest,
   type OrderPayload,
 } from "./orderBackend.js"
+import { GuardTelegramLinkService, extractStartLinkToken } from "./channelLinking.js"
+import { TelegramLinkStore } from "./linkStore.js"
+import {
+  fetchManagedAgentCapacity,
+  formatCapacityAmount,
+  summarizeManagedAgentCapacity,
+} from "./managedAgentCapacity.js"
+import { MarketplaceOrderStore } from "./marketplaceOrderStore.js"
+import {
+  createMarketplaceCheckoutLink,
+  createMarketplaceOrder,
+  createMarketplaceOrderIntent,
+} from "./marketplaceOrders.js"
+import {
+  extractLinkedPrivyWalletAddress,
+  normalizeWallet as normalizeWalletAddress,
+} from "./walletSelection.js"
+import { DelegatedPaymentError, requestDelegatedPayment } from "./delegatedPayment.js"
 
 type ConciergeAction = "recipe" | "alt" | "confirm" | "cancel"
 
@@ -52,6 +66,16 @@ type EntitlementDecision = {
   reason?: string
   evaluated_plan?: string
   required?: { type: string; plan?: string; [k: string]: unknown }
+}
+
+type PaymentAttemptResult = {
+  entitlement: EntitlementDecision
+  txHash?: string
+  chainId?: number
+  reason?: "pending_settlement" | "payment_stepup_required" | "topup_required" | "retryable_failure"
+  checkoutUrl?: string
+  topupUrl?: string
+  valuyaOrderId?: string
 }
 
 type WhoamiResponse = {
@@ -95,6 +119,17 @@ type ParsedCallback =
   | { kind: "consent" }
   | { kind: "action"; action: "confirm" | "alt" | "cancel"; orderId: string }
 
+type LinkedPurchaseContext = {
+  subject: AgentSubject
+  linkedPrivyWalletAddress?: string
+  protocolSubjectHeader?: string
+  protocolSubjectType?: string
+  protocolSubjectId?: string
+  guardSubjectId?: string
+  guardSubjectType?: string
+  guardSubjectExternalId?: string
+}
+
 loadEnvFromDotFile()
 
 const TELEGRAM_BOT_TOKEN = requiredEnv("TELEGRAM_BOT_TOKEN")
@@ -109,8 +144,13 @@ const VALUYA_BACKEND_BASE_URL = requiredEnv("VALUYA_BACKEND_BASE_URL").replace(
 )
 const VALUYA_BACKEND_TOKEN =
   process.env.VALUYA_BACKEND_TOKEN?.trim() || VALUYA_TENANT_TOKEN
-const VALUYA_PRIVATE_KEY = requiredEnv("VALUYA_PRIVATE_KEY")
-const VALUYA_RPC_URL = requiredEnv("VALUYA_RPC_URL")
+const TELEGRAM_CHANNEL_APP_ID = process.env.TELEGRAM_CHANNEL_APP_ID?.trim() || "telegram_main"
+const TELEGRAM_LINKS_FILE =
+  process.env.TELEGRAM_LINKS_FILE?.trim() ||
+  resolve(process.cwd(), ".data/telegram-links.json")
+const MARKETPLACE_ORDERS_FILE =
+  process.env.MARKETPLACE_ORDERS_FILE?.trim() ||
+  resolve(process.cwd(), ".data/marketplace-orders.json")
 
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`
 const N8N_WEBHOOK_URL = `${N8N_BASE_URL}${N8N_WEBHOOK_PATH.startsWith("/") ? "" : "/"}${N8N_WEBHOOK_PATH}`
@@ -119,23 +159,38 @@ const RESOURCE =
   process.env.VALUYA_RESOURCE?.trim() ||
   "telegram:bot:8748562521_aagildb2h9wfenj7uh5snityv-7zukwdj5o:recipe_confirm_alt_cancel_status"
 const PLAN = process.env.VALUYA_PLAN?.trim() || "standard"
+const CAPACITY_RESOURCE = process.env.TELEGRAM_CAPACITY_RESOURCE?.trim() || RESOURCE
+const CAPACITY_PLAN = process.env.TELEGRAM_CAPACITY_PLAN?.trim() || PLAN
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 300
 const POLL_TIMEOUT_SECONDS = 25
-const VALUYA_POLL_INTERVAL_MS = Number(process.env.VALUYA_POLL_INTERVAL ?? 3000)
-const VALUYA_POLL_TIMEOUT_MS = Number(process.env.VALUYA_POLL_TIMEOUT ?? 60000)
+const DELEGATED_COUNTERPARTY_TYPE = "merchant"
+const DELEGATED_COUNTERPARTY_ID = process.env.VALUYA_COUNTERPARTY_ID?.trim() || "alfies"
+const DELEGATED_SCOPE = process.env.VALUYA_DELEGATED_SCOPE?.trim() || "commerce.order"
+const DELEGATED_CURRENCY = process.env.VALUYA_PAYMENT_CURRENCY?.trim() || "EUR"
+const DELEGATED_ASSET = process.env.VALUYA_PAYMENT_ASSET?.trim() || "EURe"
+const MARKETPLACE_MERCHANT_SLUG = process.env.MARKETPLACE_MERCHANT_SLUG?.trim() || DELEGATED_COUNTERPARTY_ID
+const MARKETPLACE_PRODUCT_ID = requiredPositiveInt(
+  process.env.MARKETPLACE_PRODUCT_ID || process.env.VALUYA_PRODUCT_ID,
+  "MARKETPLACE_PRODUCT_ID_or_VALUYA_PRODUCT_ID_required",
+)
 
 const cfg: AgentConfig = {
   base: VALUYA_BASE,
   tenant_token: VALUYA_TENANT_TOKEN,
 }
-const signer = makeEthersSigner(
-  VALUYA_PRIVATE_KEY,
-  createProvider(VALUYA_RPC_URL),
-)
 
 const consentByUser = new Map<string, boolean>()
 const orderContextByOrderId = new Map<string, OrderContext>()
+const linkStore = new TelegramLinkStore(TELEGRAM_LINKS_FILE)
+const marketplaceOrderStore = new MarketplaceOrderStore(MARKETPLACE_ORDERS_FILE)
+const guardLinking = new GuardTelegramLinkService({
+  baseUrl: VALUYA_BASE,
+  tenantToken: VALUYA_TENANT_TOKEN,
+  channelAppId: TELEGRAM_CHANNEL_APP_ID,
+  linkStore,
+  logger: log,
+})
 
 if (PLAN.toLowerCase() === "free") {
   throw new Error("VALUYA_PLAN_free_not_allowed")
@@ -148,6 +203,10 @@ async function run(): Promise<void> {
     webhook: N8N_WEBHOOK_URL,
     valuyaBase: VALUYA_BASE,
     backendBaseUrl: VALUYA_BACKEND_BASE_URL,
+    channelAppId: TELEGRAM_CHANNEL_APP_ID,
+    linksFile: TELEGRAM_LINKS_FILE,
+    marketplaceOrdersFile: MARKETPLACE_ORDERS_FILE,
+    marketplaceProductId: MARKETPLACE_PRODUCT_ID,
     resource: RESOURCE,
     plan: PLAN,
     devNote:
@@ -192,20 +251,32 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
   const chatId = message.chat.id
   const userId = String(from.id)
 
-  if (text === "/start") {
-    await sendStart(chatId, from.id)
+  if (/^\/start(?:@\w+)?(?:\s+\S+)?$/i.test(text)) {
+    await handleStart(chatId, from, text)
     return
   }
 
   if (text === "/status") {
-    await handleStatus(chatId, from.id)
+    await handleStatus(chatId, from)
     return
   }
 
   if (text === "/whoami") {
-    const paymentSubject = await resolvePaymentSubject(from.id)
-    const who = await whoamiForSubject(paymentSubject)
-    await sendMarkdown(chatId, formatWhoamiText(who, paymentSubject))
+    const payment = await ensureLinkedSubjectForPaymentAction({
+      chatId,
+      telegramUserId: from.id,
+      telegramUsername: from.username,
+    })
+    if (!payment) return
+    const who = await whoamiForSubject(payment.subject)
+    const capacityText = await formatManagedCapacityText(payment.subject)
+    await sendMarkdown(
+      chatId,
+      [
+        formatWhoamiText(who, payment.subject),
+        ...(capacityText ? ["", capacityText] : []),
+      ].join("\n"),
+    )
     return
   }
 
@@ -215,6 +286,13 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     await sendConsentPrompt(chatId)
     return
   }
+
+  const linked = await ensureLinkedSubjectForPaymentAction({
+    chatId,
+    telegramUserId: from.id,
+    telegramUsername: from.username,
+  })
+  if (!linked) return
 
   // DEV NOTE: force a new random order_id for every order request.
   // TODO: double-check final order_id strategy before production.
@@ -226,7 +304,10 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     action: "recipe",
     orderId,
     message: text,
-    subject: { type: "telegram", id: from.id },
+    subject: linked.subject,
+    channelContext: { type: "telegram", id: from.id },
+    actor_type: "agent",
+    channel: "telegram",
   })
 
   updateOrderContextFromConcierge(response)
@@ -265,26 +346,49 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
     return
   }
 
-  const resolvedPaymentSubject = await resolvePaymentSubject(telegramUserId)
-  const resolvedCanonicalSubject = `${resolvedPaymentSubject.type}:${resolvedPaymentSubject.id}`
+  const linked = await ensureLinkedSubjectForPaymentAction({
+    chatId,
+    telegramUserId,
+    telegramUsername: query.from.username,
+  })
+  if (!linked) {
+    await answerCallback(query.id, "Link your account first")
+    return
+  }
+  const resolvedPaymentSubject = linked.subject
+  const resolvedCanonicalSubject = String(linked.protocolSubjectHeader || "").trim()
+  const localOrderIdCandidate = parsed.kind === "action" ? parsed.orderId : ""
 
   await sendChatAction(chatId, "typing")
 
   if (parsed.action === "confirm") {
-    const who = await whoamiForSubject(resolvedPaymentSubject)
-    let paymentResult: {
-      entitlement: EntitlementDecision
-      txHash?: string
-      chainId?: number
+    const orderPayload = buildOrderPayloadForBackend(localOrderIdCandidate)
+    orderPayload.meta = {
+      ...orderPayload.meta,
+      actor_type: "agent",
+      channel: "telegram",
+      subject_type: linked.protocolSubjectType || resolvedPaymentSubject.type,
+      subject_external_id: linked.protocolSubjectId || resolvedPaymentSubject.id,
     }
+
+    const who = await whoamiForSubject(resolvedPaymentSubject)
+    let paymentResult: PaymentAttemptResult
     try {
       paymentResult = await ensureEntitledViaAgent({
         subject: resolvedPaymentSubject,
-        orderId: parsed.orderId,
+        subjectHeader: resolvedCanonicalSubject,
+        linkedPrivyWalletAddress: linked.linkedPrivyWalletAddress,
+        orderId: localOrderIdCandidate,
+        amountCents: toInt(orderPayload.meta.total_cents),
+        cart: orderPayload.products,
+        guardSubjectId: linked.guardSubjectId,
+        guardSubjectType: linked.guardSubjectType,
+        guardSubjectExternalId: linked.guardSubjectExternalId,
       })
     } catch (error) {
       logError("agent_purchase_error", error, {
-        orderId: parsed.orderId,
+        orderId: localOrderIdCandidate,
+        localOrderIdCandidate,
         subjectId: resolvedCanonicalSubject,
       })
       await answerCallback(query.id, "Payment failed")
@@ -303,18 +407,47 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
 
     const entitlement = paymentResult.entitlement
     if (!entitlement.active) {
-      await answerCallback(query.id, "Payment not active")
+      if (paymentResult.checkoutUrl) {
+        await answerCallback(query.id, "Checkout required")
+        await sendMarkdown(
+          chatId,
+          escapeMarkdownV2(
+            "Checkout required for this order amount. Please complete payment with the button, then confirm again.",
+          ),
+          {
+            inline_keyboard: [
+              [{ text: "Top up / Pay", url: paymentResult.checkoutUrl }],
+              [{ text: "🔁 Erneut bestätigen", callback_data: `confirm:${localOrderIdCandidate}` }],
+            ],
+          },
+        )
+        return
+      }
+      await answerCallback(query.id, paymentResult.reason === "pending_settlement" ? "Payment pending" : "Payment not active")
       await sendMarkdown(
         chatId,
         [
           escapeMarkdownV2(
-            "Automatic agent payment failed or is still pending.",
+            paymentResult.reason === "pending_settlement"
+              ? "Zahlung wurde gesendet und wird noch bestätigt. Bitte gleich noch einmal versuchen."
+              : paymentResult.topupUrl
+                ? "Dein Wallet-Guthaben reicht für die automatische Agent-Zahlung aktuell nicht aus."
+                : "Automatic agent payment failed.",
           ),
+          ...(paymentResult.topupUrl
+            ? ["", `[Top up / Pay](${paymentResult.topupUrl})`]
+            : []),
           "",
           formatWhoamiText(who, resolvedPaymentSubject),
-          "",
-          escapeMarkdownV2("Run /status and try confirm again."),
         ].join("\n"),
+        paymentResult.topupUrl
+          ? {
+              inline_keyboard: [
+                [{ text: "Top up / Pay", url: paymentResult.topupUrl }],
+                [{ text: "🔁 Erneut bestätigen", callback_data: `confirm:${localOrderIdCandidate}` }],
+              ],
+            }
+          : undefined,
       )
       return
     }
@@ -331,122 +464,38 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
         ].join("\n"),
       )
     }
-  }
-
-  if (parsed.action === "confirm") {
     const backendSubjectId = resolvedCanonicalSubject
-    const orderPayload = buildOrderPayloadForBackend(parsed.orderId)
-    let usageProofKey: string | undefined
     log("confirm_flow_start", {
+      localOrderIdCandidate,
       orderId: orderPayload.order_id,
       subjectId: backendSubjectId,
       resource: RESOURCE,
       plan: PLAN,
+      flow_branch: "delegated_guard_autopay_path",
+      valuya_order_id: paymentResult.valuyaOrderId || null,
     })
 
     try {
-      // A) wait for active mandate after verify
-      const gate = await waitForActiveEntitlement({
-        subjectId: backendSubjectId,
-        resource: RESOURCE,
-        plan: PLAN,
-        maxAttempts: 6,
-        delaysMs: [400, 800, 1500, 2500, 4000, 6000],
-      })
-      if (!gate.active) {
-        await sendMarkdown(
-          chatId,
-          escapeMarkdownV2(
-            "Zahlung noch ausstehend. Bitte kurz warten und /status erneut prüfen.",
-          ),
-        )
-        await sendPaymentRequiredMessage(
-          chatId,
-          resolvedPaymentSubject,
-          orderPayload.order_id,
-        )
-        return
-      }
-
-      // B) usage consume first
-      const consume = await consumeUsage({
-        valuyaBase: VALUYA_BASE,
-        tenantToken: VALUYA_TENANT_TOKEN,
-        subjectId: backendSubjectId,
-        resource: RESOURCE,
-        plan: PLAN,
-        orderId: orderPayload.order_id,
-      })
-      usageProofKey = consume.idem
-
-      log("usage_consume_response", {
-        orderId: orderPayload.order_id,
-        subjectId: backendSubjectId,
-        resource: RESOURCE,
-        plan: PLAN,
-        status: consume.status,
-        ok: consume.ok,
-        idempotencyKey: consume.idem,
-        body: consume.json,
-      })
-
-      if (!consume.ok || (consume.json as any)?.ok === false) {
-        log("confirm_blocked_by_usage", {
-          orderId: orderPayload.order_id,
-          subjectId: backendSubjectId,
-          reason: (consume.json as any)?.error || "usage_consume_failed",
-          details: consume.json,
-        })
-        if (
-          consume.status === 402 ||
-          (consume.json as any)?.error === "payment_required"
-        ) {
-          await sendPaymentRequiredMessage(
-            chatId,
-            resolvedPaymentSubject,
-            orderPayload.order_id,
-          )
-        } else if (consume.status === 403) {
-          await sendMarkdown(
-            chatId,
-            escapeMarkdownV2(
-              "Zahlung konnte nicht geprüft werden (Scope fehlt). Bitte Support kontaktieren.",
-            ),
-          )
-        } else {
-          await sendMarkdown(
-            chatId,
-            escapeMarkdownV2(
-              "Zahlung konnte nicht verbucht werden. Bitte erneut versuchen.",
-            ),
-          )
-        }
-        return
-      }
-
-      // C) now safe: n8n confirm
       const response = await callConciergeWithRetry({
         action: "confirm",
         orderId: parsed.orderId,
-        subject: { type: "telegram", id: telegramUserId },
+        subject: resolvedPaymentSubject,
+        channelContext: { type: "telegram", id: telegramUserId },
+        actor_type: "agent",
+        channel: "telegram",
       })
 
       await answerCallback(query.id, "Updated")
       updateOrderContextFromConcierge(response)
       await sendConciergeResponse(chatId, response)
 
-      // D) submit order
-      log("order_usage_proof_attached", {
-        orderId: orderPayload.order_id,
-        usageProofKey,
-      })
       log("order_request_sent", {
         orderId: orderPayload.order_id,
         subjectId: backendSubjectId,
         resource: RESOURCE,
         plan: PLAN,
       })
-      await sendOrderToBackend(orderPayload, backendSubjectId, usageProofKey)
+      await sendOrderToBackend(orderPayload, backendSubjectId)
 
       await sendMarkdown(
         chatId,
@@ -465,21 +514,6 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
         ].join("\n"),
       )
     } catch (error) {
-      if (isOrderUsageProofRejected(error, usageProofKey)) {
-        log("order_usage_proof_rejected", {
-          orderId: orderPayload.order_id,
-          subjectId: backendSubjectId,
-          usageProofKey,
-          error: extractOrderErrorDetails(error),
-        })
-        await sendMarkdown(
-          chatId,
-          escapeMarkdownV2(
-            `Bestellung konnte nicht finalisiert werden (402 trotz Usage-Proof). Bitte /status ausführen und erneut bestätigen. Diagnose: order=${orderPayload.order_id}, proof=${usageProofKey}`,
-          ),
-        )
-        return
-      }
       await sendOrderFailedMessage(
         chatId,
         orderPayload.order_id,
@@ -493,7 +527,10 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
   const response = await callConciergeWithRetry({
     action: parsed.action,
     orderId: parsed.orderId,
-    subject: { type: "telegram", id: telegramUserId },
+    subject: resolvedPaymentSubject,
+    channelContext: { type: "telegram", id: telegramUserId },
+    actor_type: "agent",
+    channel: "telegram",
   })
 
   await answerCallback(query.id, "Updated")
@@ -521,9 +558,30 @@ async function sendOrderFailedMessage(
 
 async function sendPaymentRequiredMessage(
   chatId: number,
-  subject: AgentSubject,
+  linked: LinkedPurchaseContext,
+  orderPayload: OrderPayload,
   orderId: string,
 ): Promise<void> {
+  const subject = linked.subject
+  const subjectHeader = String(linked.protocolSubjectHeader || "").trim()
+  if (!String(subjectHeader || "").trim()) {
+    log("linked_protocol_subject_missing", {
+      tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+      subjectHeader: null,
+      principal_subject_type: null,
+      principal_subject_id: null,
+      wallet_address: null,
+      wallet_source: "protocol_subject_missing_fail_safe",
+      linked_privy_wallet_address: null,
+      guard_agent_wallet_address: null,
+      resource: RESOURCE,
+      plan: PLAN,
+      orderId,
+      error: "linked_protocol_subject_missing_fail_safe",
+    })
+    throw new Error("linked_protocol_subject_missing_fail_safe")
+  }
+
   const ent = await getEntitlement(subject)
   if (ent.active) {
     await sendMarkdown(
@@ -538,19 +596,39 @@ async function sendPaymentRequiredMessage(
     return
   }
 
-  const session = await createCheckoutSessionForSubject(
-    subject,
-    ent.required || { type: "subscription", plan: PLAN },
-  )
+  const marketplaceIntent = await createMarketplaceOrderIntentForCheckout({
+    linked,
+    orderPayload,
+    localOrderId: orderId,
+  })
+
+  log("marketplace_checkout_link_sent", {
+    tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+    local_order_id: orderId,
+    returned_valuya_order_id: marketplaceIntent.valuyaOrderId,
+    checkout_url: marketplaceIntent.checkoutUrl,
+    guard_subject_id: linked.guardSubjectId || null,
+    guard_subject_type: linked.guardSubjectType || null,
+    guard_subject_external_id: linked.guardSubjectExternalId || null,
+    protocol_subject_header: subjectHeader,
+    product_id: MARKETPLACE_PRODUCT_ID,
+    merchant_slug: MARKETPLACE_MERCHANT_SLUG,
+    channel: "telegram",
+    resource: RESOURCE,
+    plan: PLAN,
+    amount_cents:
+      toInt(orderPayload.meta?.total_cents) ||
+      calculateOrderAmountCents(orderPayload.products),
+  })
 
   await sendMarkdown(
     chatId,
     escapeMarkdownV2(
-      "Zahlung/Top-up erforderlich. Bitte über den Button bezahlen und danach erneut bestätigen.",
+      "Checkout required for this order amount. Please complete payment with the button, then confirm again.",
     ),
     {
       inline_keyboard: [
-        [{ text: "Top up / Pay", url: session.payment_url }],
+        [{ text: "Top up / Pay", url: marketplaceIntent.checkoutUrl }],
         [{ text: "🔁 Erneut bestätigen", callback_data: `confirm:${orderId}` }],
       ],
     },
@@ -559,11 +637,18 @@ async function sendPaymentRequiredMessage(
 
 async function handleStatus(
   chatId: number,
-  telegramUserId: number,
+  from: { id: number; username?: string },
 ): Promise<void> {
-  const subject = await resolvePaymentSubject(telegramUserId)
+  const linked = await ensureLinkedSubjectForPaymentAction({
+    chatId,
+    telegramUserId: from.id,
+    telegramUsername: from.username,
+  })
+  if (!linked) return
+  const subject = linked.subject
   const entitlement = await getEntitlement(subject)
   const who = await whoamiForSubject(subject)
+  const capacityText = await formatManagedCapacityText(subject)
 
   if (entitlement.active) {
     await sendMarkdown(
@@ -571,6 +656,7 @@ async function handleStatus(
       [
         escapeMarkdownV2("Payment is active for order confirmations."),
         "",
+        ...(capacityText ? [capacityText, ""] : []),
         formatWhoamiText(who, subject),
       ].join("\n"),
     )
@@ -582,6 +668,7 @@ async function handleStatus(
     [
       escapeMarkdownV2("Payment is still pending or inactive."),
       "",
+      ...(capacityText ? [capacityText, ""] : []),
       formatWhoamiText(who, subject),
       "",
       escapeMarkdownV2("Tap confirm to let the agent execute payment again."),
@@ -602,17 +689,64 @@ function parseCallback(data: string): ParsedCallback | null {
   }
 }
 
-function subjectForPayments(telegramUserId: number): AgentSubject {
-  // Canonical subject string remains <type>:<id> and uses stable per-user identity.
-  return { type: "user", id: String(telegramUserId) }
-}
-
-async function sendStart(
+async function handleStart(
   chatId: number,
-  telegramUserId: number,
+  from: { id: number; username?: string },
+  text: string,
 ): Promise<void> {
-  const paymentSubject = await resolvePaymentSubject(telegramUserId)
-  const who = await whoamiForSubject(paymentSubject)
+  const token = extractStartLinkToken(text)
+  let redeemedSubject: AgentSubject | null = null
+  if (token) {
+    log("link_attempt", {
+      telegramUserId: String(from.id),
+      tokenPrefix: token.slice(0, 8),
+    })
+    const redeemed = await guardLinking.redeemLinkToken({
+      telegramUserId: String(from.id),
+      telegramUsername: from.username,
+      linkToken: token,
+    })
+    if (redeemed.linked) {
+      redeemedSubject = redeemed.subject
+      log("link_success", {
+        telegramUserId: String(from.id),
+        source: redeemed.source,
+        tenantId: redeemed.link.tenant_id,
+        subjectType: redeemed.subject.type,
+        protocolSubjectHeader: redeemed.link.valuya_protocol_subject_header || null,
+        walletAddress: redeemed.link.valuya_linked_wallet_address || null,
+        channelAppId: redeemed.link.channel_app_id,
+      })
+      await sendMarkdown(
+        chatId,
+        escapeMarkdownV2("Your Valuya account is now linked to this Telegram account."),
+      )
+    } else {
+      log("link_failure", {
+        telegramUserId: String(from.id),
+        code: redeemed.code,
+        reason: redeemed.message,
+      })
+      await sendMarkdown(chatId, escapeMarkdownV2(redeemed.message))
+    }
+  }
+
+  let paymentSubject: AgentSubject | null = redeemedSubject
+  if (paymentSubject) {
+    log("guard_telegram_resolve_ignored_after_redeem_success", {
+      tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+      channel_user_id: String(from.id),
+      channel_app_id: TELEGRAM_CHANNEL_APP_ID,
+      reason: "redeem_success_already_authoritative",
+    })
+  } else {
+    paymentSubject = await resolveLinkedSubjectOrNull({
+      telegramUserId: from.id,
+      telegramUsername: from.username,
+    })
+  }
+  const who = paymentSubject ? await whoamiForSubject(paymentSubject) : null
+  const capacityText = paymentSubject ? await formatManagedCapacityText(paymentSubject) : ""
   await sendMarkdown(
     chatId,
     [
@@ -620,7 +754,10 @@ async function sendStart(
       escapeMarkdownV2("I can suggest recipes and mock carts."),
       escapeMarkdownV2("Order confirmation is payment-gated via Valuya Agent."),
       "",
-      formatWhoamiText(who, paymentSubject),
+      ...(capacityText ? [capacityText, ""] : []),
+      ...(paymentSubject && who
+        ? [formatWhoamiText(who, paymentSubject)]
+        : [escapeMarkdownV2("Link your account via onboarding deep-link /start <token>.")]),
       "",
       escapeMarkdownV2("Tap consent to allow agent-driven payment requests."),
     ].join("\n"),
@@ -630,6 +767,64 @@ async function sendStart(
       ],
     },
   )
+}
+
+async function ensureLinkedSubjectForPaymentAction(args: {
+  chatId: number
+  telegramUserId: number
+  telegramUsername?: string
+}): Promise<LinkedPurchaseContext | null> {
+  const resolved = await guardLinking.ensureLinkedForPaymentAction({
+    telegramUserId: String(args.telegramUserId),
+    telegramUsername: args.telegramUsername,
+  })
+  if (!resolved.allowed) {
+    await sendMarkdown(args.chatId, escapeMarkdownV2(resolved.reply))
+    return null
+  }
+  const protocolSubjectHeader = String(resolved.link.valuya_protocol_subject_header || "").trim()
+  if (!protocolSubjectHeader) {
+    log("linked_protocol_subject_missing", {
+      tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+      channel_user_id: String(args.telegramUserId),
+      subjectHeader: null,
+      principal_subject_type: null,
+      principal_subject_id: null,
+      wallet_address: null,
+      wallet_source: "protocol_subject_missing_fail_safe",
+      linked_privy_wallet_address: resolved.link.valuya_linked_wallet_address || null,
+      guard_agent_wallet_address: null,
+      resource: RESOURCE,
+      plan: PLAN,
+      error: "linked_protocol_subject_missing_fail_safe",
+    })
+    await sendMarkdown(
+      args.chatId,
+      escapeMarkdownV2("Linked Valuya protocol subject is missing. Please re-run onboarding link /start."),
+    )
+    return null
+  }
+  return {
+    subject: resolved.subject,
+    linkedPrivyWalletAddress: resolved.link.valuya_linked_wallet_address,
+    protocolSubjectHeader,
+    protocolSubjectType: resolved.link.valuya_protocol_subject_type,
+    protocolSubjectId: resolved.link.valuya_protocol_subject_id,
+    guardSubjectId: resolved.link.valuya_subject_id,
+    guardSubjectType: resolved.link.valuya_subject_type,
+    guardSubjectExternalId: resolved.link.valuya_subject_external_id,
+  }
+}
+
+async function resolveLinkedSubjectOrNull(args: {
+  telegramUserId: number
+  telegramUsername?: string
+}): Promise<AgentSubject | null> {
+  const resolved = await guardLinking.resolveLinkedSubject({
+    telegramUserId: String(args.telegramUserId),
+    telegramUsername: args.telegramUsername,
+  })
+  return resolved.linked ? resolved.subject : null
 }
 
 async function sendConsentPrompt(chatId: number): Promise<void> {
@@ -648,14 +843,21 @@ async function whoamiForSubject(
   subject: AgentSubject,
 ): Promise<WhoamiResponse> {
   const path = "/api/v2/agent/whoami"
+  const subjectId = `${subject.type}:${subject.id}`
   const headers: Record<string, string> = {
     Accept: "application/json",
   }
   if (subject.type && subject.id) {
-    headers["X-Valuya-Subject-Id"] = `${subject.type}:${subject.id}`
+    headers["X-Valuya-Subject-Id"] = subjectId
     headers["X-Valuya-Subject-Type"] = subject.type
     headers["X-Valuya-Subject-Id-Raw"] = subject.id
   }
+  log("valuya_request_whoami", {
+    tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+    subjectHeader: subjectId,
+    resource: RESOURCE,
+    plan: PLAN,
+  })
   return apiJson<WhoamiResponse>({
     cfg,
     method: "GET",
@@ -664,50 +866,15 @@ async function whoamiForSubject(
   })
 }
 
-async function resolvePaymentSubject(
-  telegramUserId: number,
-): Promise<AgentSubject> {
-  const fallback = subjectForPayments(telegramUserId)
-  try {
-    // Resolve principal bound to tenant token first; this is the canonical payment subject.
-    const who = await apiJson<WhoamiResponse>({
-      cfg,
-      method: "GET",
-      path: "/api/v2/agent/whoami",
-      headers: { Accept: "application/json" },
-    })
-    const principal = who.principal?.subject
-    const type = String(principal?.type || "").trim()
-    const id = String(principal?.id || "").trim()
-    if (type && id) {
-      log("payment_subject_resolved", {
-        source: "whoami_principal",
-        telegramUserId: String(telegramUserId),
-        subjectId: `${type}:${id}`,
-      })
-      return { type, id }
-    }
-  } catch (error) {
-    logError("payment_subject_resolve_error", error, {
-      telegramUserId: String(telegramUserId),
-    })
-  }
-
-  log("payment_subject_resolved", {
-    source: "telegram_fallback",
-    telegramUserId: String(telegramUserId),
-    subjectId: `${fallback.type}:${fallback.id}`,
-  })
-  return fallback
-}
-
 async function getEntitlement(
   subject: AgentSubject,
 ): Promise<EntitlementDecision> {
   const path = `/api/v2/entitlements?plan=${encodeURIComponent(PLAN)}&resource=${encodeURIComponent(RESOURCE)}`
   const subjectId = `${subject.type}:${subject.id}`
   log("entitlement_request", {
+    tenant: tokenPreview(VALUYA_TENANT_TOKEN),
     subjectId,
+    subjectHeader: subjectId,
     resource: RESOURCE,
     plan: PLAN,
   })
@@ -791,32 +958,87 @@ function parseSubjectId(subjectId: string): AgentSubject {
   }
 }
 
-async function createCheckoutSessionForSubject(
-  subject: AgentSubject,
-  required: { type: string; plan?: string; [k: string]: unknown },
-): Promise<{ payment_url: string; session_id: string }> {
-  const subjectId = `${subject.type}:${subject.id}`
-  return apiJson({
-    cfg,
-    method: "POST",
-    path: "/api/v2/checkout/sessions",
-    headers: {
-      "X-Valuya-Subject": subjectId,
-      "X-Valuya-Subject-Id": subjectId,
-      "X-Valuya-Subject-Type": subject.type,
-      "X-Valuya-Subject-Id-Raw": subject.id,
-      Accept: "application/json",
-    },
-    body: {
-      resource: RESOURCE,
-      plan: PLAN,
-      evaluated_plan: PLAN,
-      subject,
-      principal: subject,
-      required,
-      mode: "agent",
-    },
+async function createMarketplaceOrderIntentForCheckout(args: {
+  linked: LinkedPurchaseContext
+  orderPayload: OrderPayload
+  localOrderId: string
+}): Promise<{ checkoutUrl: string; valuyaOrderId: string }> {
+  const protocolSubjectHeader = String(args.linked.protocolSubjectHeader || "").trim()
+  if (!protocolSubjectHeader) {
+    throw new Error("linked_protocol_subject_missing_fail_safe")
+  }
+
+  const guardSubjectId = String(args.linked.guardSubjectId || "").trim()
+  const guardSubjectType = String(args.linked.guardSubjectType || "").trim()
+  const guardSubjectExternalId = String(args.linked.guardSubjectExternalId || "").trim()
+  const guardSubject =
+    guardSubjectId
+      ? { id: guardSubjectId as string }
+      : guardSubjectType && guardSubjectExternalId
+        ? { type: guardSubjectType as string, external_id: guardSubjectExternalId as string }
+        : null
+  if (!guardSubject) {
+    throw new Error("marketplace_guard_subject_missing_fail_safe")
+  }
+
+  const amountCents =
+    toInt(args.orderPayload.meta?.total_cents) ||
+    calculateOrderAmountCents(args.orderPayload.products)
+  if (!amountCents || amountCents <= 0) {
+    throw new Error("marketplace_amount_missing_fail_safe")
+  }
+
+  const cart = {
+    items: args.orderPayload.products.map((p) => ({
+      sku: p.sku,
+      name: p.name,
+      qty: p.qty,
+      ...(typeof p.unit_price_cents === "number"
+        ? { unit_price_cents: p.unit_price_cents }
+        : {}),
+    })),
+  }
+
+  const response = await createMarketplaceOrderIntent({
+    baseUrl: VALUYA_BASE,
+    tenantToken: VALUYA_TENANT_TOKEN,
+    guardSubject,
+    protocolSubjectHeader,
+    productId: MARKETPLACE_PRODUCT_ID,
+    merchantSlug: MARKETPLACE_MERCHANT_SLUG,
+    channel: "telegram",
+    resource: RESOURCE,
+    plan: PLAN,
+    amountCents,
+    currency: DELEGATED_CURRENCY,
+    asset: DELEGATED_ASSET,
+    cart,
+    localOrderId: args.localOrderId,
+    logger: log,
   })
+
+  const valuyaOrderId = String(response.order?.order_id || "").trim()
+  const checkoutUrl = String(response.checkout_url || "").trim()
+  if (!valuyaOrderId) {
+    throw new Error("marketplace_order_id_missing_fail_safe")
+  }
+  if (!checkoutUrl) {
+    throw new Error("marketplace_checkout_url_missing_fail_safe")
+  }
+
+  await marketplaceOrderStore.upsert(args.localOrderId, {
+    valuya_order_id: valuyaOrderId,
+    checkout_url: checkoutUrl,
+    guard_subject_id: guardSubjectId || undefined,
+    guard_subject_type: guardSubjectType || undefined,
+    guard_subject_external_id: guardSubjectExternalId || undefined,
+    protocol_subject_header: protocolSubjectHeader,
+    amount_cents: amountCents,
+    currency: DELEGATED_CURRENCY,
+    status: String(response.order?.status || "awaiting_checkout"),
+  })
+
+  return { checkoutUrl, valuyaOrderId }
 }
 
 async function consumeUsage(params: {
@@ -832,8 +1054,13 @@ async function consumeUsage(params: {
   const url = `${valuyaBase.replace(/\/+$/, "")}/api/v2/usage/consume`
 
   log("usage_consume_request", {
+    tenant: tokenPreview(tenantToken),
     orderId,
     subjectId,
+    subjectHeader: subjectId,
+    principal_subject_type: parseSubjectId(subjectId).type,
+    principal_subject_id: parseSubjectId(subjectId).id,
+    wallet_address: null,
     resource,
     plan,
     idempotencyKey: idem,
@@ -869,69 +1096,242 @@ async function consumeUsage(params: {
 
 async function ensureEntitledViaAgent(args: {
   subject: AgentSubject
+  subjectHeader: string
+  linkedPrivyWalletAddress?: string
   orderId: string
-}): Promise<{
-  entitlement: EntitlementDecision
-  txHash?: string
-  chainId?: number
-}> {
+  amountCents?: number
+  cart?: unknown
+  guardSubjectId?: string
+  guardSubjectType?: string
+  guardSubjectExternalId?: string
+}): Promise<PaymentAttemptResult> {
+  const subjectId = String(args.subjectHeader || "").trim()
+  if (!subjectId) {
+    log("linked_protocol_subject_missing", {
+      tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+      subjectHeader: null,
+      principal_subject_type: null,
+      principal_subject_id: null,
+      wallet_address: null,
+      wallet_source: "protocol_subject_missing_fail_safe",
+      linked_privy_wallet_address: normalizeWalletAddress(args.linkedPrivyWalletAddress) || null,
+      guard_agent_wallet_address: null,
+      resource: RESOURCE,
+      plan: PLAN,
+      orderId: args.orderId,
+      error: "linked_protocol_subject_missing_fail_safe",
+    })
+    throw new Error("linked_protocol_subject_missing_fail_safe")
+  }
+
   const before = await getEntitlement(args.subject)
   if (before.active) return { entitlement: before }
 
-  const required = before.required || { type: "subscription", plan: PLAN }
-  const subjectId = `${args.subject.type}:${args.subject.id}`
+  const principal = canonicalPrincipalForAllowlist(subjectId)
+  const guardSubjectId = String(args.guardSubjectId || "").trim()
+  const guardSubjectType = String(args.guardSubjectType || "").trim()
+  const guardSubjectExternalId = String(args.guardSubjectExternalId || "").trim()
+  if (!guardSubjectId && (!guardSubjectType || !guardSubjectExternalId)) {
+    log("delegated_payment_guard_subject_missing", {
+      tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+      protocol_subject_header: subjectId,
+      guard_subject_id: guardSubjectId || null,
+      guard_subject_type: guardSubjectType || null,
+      guard_subject_external_id: guardSubjectExternalId || null,
+      error: "delegated_payment_guard_subject_missing_fail_safe",
+    })
+    throw new Error("delegated_payment_guard_subject_missing_fail_safe")
+  }
+  const who = await whoamiForSubject(args.subject)
+  const linkedPrivyWallet =
+    normalizeWalletAddress(args.linkedPrivyWalletAddress) ||
+    extractLinkedPrivyWalletAddress(who)
+  const guardAgentWallet = String(who.agent?.wallet_address || "").trim().toLowerCase()
+  const walletSelection = linkedPrivyWallet
+    ? { ok: true as const, walletAddress: linkedPrivyWallet, walletSource: "linked_privy_wallet" as const }
+    : {
+        ok: false as const,
+        error: "linked_privy_wallet_missing_fail_safe" as const,
+        message: `No linked Privy wallet available for ${subjectId}`,
+      }
 
-  const result = await purchase({
-    cfg,
-    signer,
-    subject: args.subject,
-    principal: args.subject,
+  log("legacy_signer_path_skipped", {
+    tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+    subjectHeader: subjectId,
+    principal_subject_type: principal.type,
+    principal_subject_id: principal.id,
+    wallet_address: null,
+    wallet_source: "delegated_guard_payment",
+    linked_privy_wallet_address: linkedPrivyWallet,
+    guard_agent_wallet_address: guardAgentWallet || null,
     resource: RESOURCE,
     plan: PLAN,
-    required: required as any,
-    pollIntervalMs: VALUYA_POLL_INTERVAL_MS,
-    pollTimeoutMs: VALUYA_POLL_TIMEOUT_MS,
-    sendTx: async (payment) => {
-      if (payment.method !== "onchain") {
-        throw new Error(`unsupported_payment_method:${payment.method}`)
-      }
-      return sendErc20Transfer({ signer, payment })
-    },
-  })
-
-  log("payment_required", {
     orderId: args.orderId,
-    subjectId,
-    sessionId: result.session.session_id,
-    paymentRequiredResponse: result.session,
+    reason: "linked_user_purchase_uses_delegated_guard_flow",
   })
 
-  log("agent_purchase_success", {
-    orderId: args.orderId,
-    subjectId,
-    sessionId: result.session.session_id,
-    txHash: result.tx_hash,
-    paymentInstruction: result.session.payment,
-    submit: result.submit,
-    verify: result.verify,
-  })
-
-  if ((result.verify as any)?.ok === true && (result.verify as any)?.state === "confirmed") {
-    log("order_gate_verify_confirmed", {
-      orderId: args.orderId,
-      subjectId,
-      sessionId: result.session.session_id,
-      state: (result.verify as any)?.state,
+  if (!walletSelection.ok) {
+    log("valuya_wallet_selection_failed", {
+      tenant: tokenPreview(VALUYA_TENANT_TOKEN),
+      subjectHeader: subjectId,
+      principal_subject_type: principal.type,
+      principal_subject_id: principal.id,
+      wallet_address: null,
+      wallet_source: "legacy_env_signer_blocked",
+      linked_privy_wallet_address: linkedPrivyWallet,
+      guard_agent_wallet_address: guardAgentWallet || null,
+      resource: RESOURCE,
+      plan: PLAN,
+      error: walletSelection.error,
+      message: walletSelection.message,
+      todo: "Do not fallback to env signer for linked-user purchase.",
     })
+    throw new Error(walletSelection.error)
   }
 
-  const after = await getEntitlement(args.subject)
-  const chainId =
-    result.session.payment &&
-    typeof (result.session.payment as any).chain_id === "number"
-      ? Number((result.session.payment as any).chain_id)
-      : undefined
-  return { entitlement: after, txHash: result.tx_hash, chainId }
+  const normalizedCart = normalizeMarketplaceCart(args.cart)
+  const marketplaceOrder = await createMarketplaceOrder({
+    baseUrl: VALUYA_BASE,
+    tenantToken: VALUYA_TENANT_TOKEN,
+    guardSubject: guardSubjectId
+      ? { id: guardSubjectId }
+      : { type: guardSubjectType, external_id: guardSubjectExternalId },
+    protocolSubjectHeader: subjectId,
+    productId: MARKETPLACE_PRODUCT_ID,
+    merchantSlug: MARKETPLACE_MERCHANT_SLUG,
+    channel: "telegram",
+    resource: RESOURCE,
+    plan: PLAN,
+    amountCents: args.amountCents || calculateCartAmountCents(normalizedCart?.items) || 0,
+    currency: DELEGATED_CURRENCY,
+    asset: DELEGATED_ASSET,
+    cart: normalizedCart,
+    localOrderId: args.orderId,
+    issueCheckoutToken: false,
+    logger: log,
+  })
+  const valuyaOrderId = String(marketplaceOrder.order?.order_id || "").trim()
+  if (!valuyaOrderId) {
+    throw new Error("marketplace_order_id_missing_fail_safe")
+  }
+
+  const idem = `alfies-delegated:${args.orderId}:v1`
+  try {
+    const delegated = await requestDelegatedPayment({
+      baseUrl: VALUYA_BASE,
+      tenantToken: VALUYA_TENANT_TOKEN,
+      protocolSubjectHeader: subjectId,
+      guardSubjectId,
+      guardSubjectType,
+      guardSubjectExternalId,
+      principalSubjectType: principal.type,
+      principalSubjectId: principal.id,
+      walletAddress: walletSelection.walletAddress,
+      actorType: "agent",
+      channel: "telegram",
+      scope: DELEGATED_SCOPE,
+      counterpartyType: DELEGATED_COUNTERPARTY_TYPE,
+      counterpartyId: DELEGATED_COUNTERPARTY_ID,
+      merchantOrderId: valuyaOrderId,
+      currency: DELEGATED_CURRENCY,
+      asset: DELEGATED_ASSET,
+      idempotencyKey: idem,
+      resource: RESOURCE,
+      plan: PLAN,
+      logger: log,
+    })
+
+    log("agent_purchase_delegated_success", {
+      orderId: args.orderId,
+      subjectId,
+      idempotencyKey: idem,
+      valuya_order_id: valuyaOrderId,
+      response: delegated,
+    })
+
+    const delegatedRecord = delegated && typeof delegated === "object" ? (delegated as Record<string, unknown>) : {}
+    const delegatedSession = readRecord(delegatedRecord.session)
+    const delegatedState =
+      readString(delegatedSession?.state) ||
+      readString(delegatedRecord.state) ||
+      ""
+    const requiresStepup =
+      delegatedSession?.requires_stepup === true ||
+      delegatedRecord.requires_stepup === true
+    if (delegatedState.toLowerCase() === "entitled") {
+      return {
+        entitlement: { active: true, reason: "entitled" },
+        txHash: readString(delegatedRecord.tx_hash),
+        chainId: toInt(delegatedRecord.chain_id),
+        valuyaOrderId,
+      }
+    }
+    if (delegatedState.toLowerCase() === "requires_stepup" || requiresStepup) {
+      const checkout = await createMarketplaceCheckoutLink({
+        baseUrl: VALUYA_BASE,
+        tenantToken: VALUYA_TENANT_TOKEN,
+        orderId: valuyaOrderId,
+        protocolSubjectHeader: subjectId,
+      })
+      return {
+        entitlement: { active: false, reason: "payment_required" },
+        reason: "payment_stepup_required",
+        checkoutUrl: String(checkout.checkout_url || "").trim() || undefined,
+        valuyaOrderId,
+      }
+    }
+
+    const after = await waitForActiveEntitlement({
+      subjectId,
+      resource: RESOURCE,
+      plan: PLAN,
+      maxAttempts: 4,
+      delaysMs: [10_000, 20_000, 35_000, 60_000],
+    })
+    return {
+      entitlement: { active: after.active, reason: after.reason },
+      txHash: readString(delegatedRecord.tx_hash),
+      chainId: toInt(delegatedRecord.chain_id),
+      valuyaOrderId,
+      ...(after.active
+        ? {}
+        : delegatedState.toLowerCase() === "pending_settlement"
+          ? { reason: "pending_settlement" as const }
+          : { reason: "retryable_failure" as const }),
+    }
+  } catch (error) {
+    if (error instanceof DelegatedPaymentError) {
+      const action = classifyDelegatedPaymentFailure(error)
+      if (action === "checkout_required") {
+        const checkout = await createMarketplaceCheckoutLink({
+          baseUrl: VALUYA_BASE,
+          tenantToken: VALUYA_TENANT_TOKEN,
+          orderId: valuyaOrderId,
+          protocolSubjectHeader: subjectId,
+        })
+        return {
+          entitlement: { active: false, reason: "payment_required" },
+          reason: "payment_stepup_required",
+          checkoutUrl: String(checkout.checkout_url || "").trim() || undefined,
+          valuyaOrderId,
+        }
+      }
+      if (action === "topup_required") {
+        return {
+          entitlement: { active: false, reason: error.code || "payment_estimation_failed" },
+          reason: "topup_required",
+          topupUrl: error.topupUrl,
+          valuyaOrderId,
+        }
+      }
+      return {
+        entitlement: { active: false, reason: error.code || "retryable_failure" },
+        reason: "retryable_failure",
+        valuyaOrderId,
+      }
+    }
+    throw error
+  }
 }
 
 function txExplorerUrl(txHash: string, chainId?: number): string | null {
@@ -943,12 +1343,23 @@ function txExplorerUrl(txHash: string, chainId?: number): string | null {
   return `https://polygonscan.com/tx/${h}`
 }
 
+function canonicalPrincipalForAllowlist(subjectHeader: string): AgentSubject {
+  const subject = parseSubjectId(subjectHeader)
+  return {
+    type: subject.type,
+    id: subject.id,
+  }
+}
+
 type ConciergePayload = {
   action: ConciergeAction
   orderId: string
   message?: string
-  subject: { type: "telegram"; id: number }
+  subject: AgentSubject
+  channelContext: { type: "telegram"; id: number }
   cartState?: Record<string, unknown>
+  actor_type?: "agent"
+  channel?: "telegram"
 }
 
 async function callConciergeWithRetry(
@@ -1085,6 +1496,71 @@ function extractOrderErrorDetails(error: unknown): unknown {
   return String(error)
 }
 
+function calculateOrderAmountCents(products: OrderPayload["products"]): number | undefined {
+  if (!Array.isArray(products) || products.length === 0) return undefined
+  let total = 0
+  let hasLine = false
+  for (const p of products) {
+    const qty = toInt(p.qty) ?? 0
+    const unit = toInt(p.unit_price_cents)
+    if (qty > 0 && typeof unit === "number" && unit > 0) {
+      total += qty * unit
+      hasLine = true
+    }
+  }
+  return hasLine ? total : undefined
+}
+
+function calculateCartAmountCents(items: unknown): number | undefined {
+  if (!Array.isArray(items) || items.length === 0) return undefined
+  let total = 0
+  let hasLine = false
+  for (const raw of items) {
+    if (!raw || typeof raw !== "object") continue
+    const item = raw as Record<string, unknown>
+    const qty = toInt(item.qty) ?? 0
+    const unit = toInt(item.unit_price_cents)
+    if (qty > 0 && typeof unit === "number" && unit > 0) {
+      total += qty * unit
+      hasLine = true
+    }
+  }
+  return hasLine ? total : undefined
+}
+
+function normalizeMarketplaceCart(input: unknown): { items: unknown[] } {
+  if (input && typeof input === "object") {
+    const obj = input as Record<string, unknown>
+    if (Array.isArray(obj.items)) return { items: obj.items }
+  }
+  if (Array.isArray(input)) return { items: input }
+  return { items: [] }
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null
+}
+
+function readString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim()
+  return undefined
+}
+
+function classifyDelegatedPaymentFailure(error: DelegatedPaymentError): "checkout_required" | "topup_required" | "retryable_failure" {
+  const marker = `${error.code} ${error.state} ${JSON.stringify(error.body).toLowerCase()}`
+  if (marker.includes("requires_stepup") || marker.includes("payment_required")) {
+    return "checkout_required"
+  }
+  if (
+    marker.includes("payment_estimation_failed") ||
+    marker.includes("estimation_failed") ||
+    marker.includes("insufficient_balance")
+  ) {
+    return "topup_required"
+  }
+  return "retryable_failure"
+}
+
 function toKeyboard(input: unknown): TelegramMarkup | undefined {
   if (!input) return undefined
 
@@ -1148,6 +1624,36 @@ function formatWhoamiText(who: WhoamiResponse, subject: AgentSubject): string {
     escapeMarkdownV2(`Agent wallet: ${wallet}`),
     escapeMarkdownV2(`Scopes: ${scopes}`),
   ].join("\n")
+}
+
+async function formatManagedCapacityText(subject: AgentSubject): Promise<string> {
+  const subjectHeader = `${subject.type}:${subject.id}`
+  try {
+    const response = await fetchManagedAgentCapacity({
+      baseUrl: VALUYA_BASE,
+      tenantToken: VALUYA_TENANT_TOKEN,
+      subjectHeader,
+      resource: CAPACITY_RESOURCE,
+      plan: CAPACITY_PLAN,
+      asset: DELEGATED_ASSET,
+      currency: DELEGATED_CURRENCY,
+      logger: log,
+    })
+    const summary = summarizeManagedAgentCapacity(response)
+    return [
+      escapeMarkdownV2("Managed agent capacity:"),
+      escapeMarkdownV2(`Wallet balance: ${formatCapacityAmount(summary.walletBalanceCents, summary.currency)}`),
+      escapeMarkdownV2(`Spendable overall: ${formatCapacityAmount(summary.overallSpendableCents, summary.currency)}`),
+      escapeMarkdownV2(`Spendable for this bot now: ${formatCapacityAmount(summary.botSpendableNowCents, summary.currency)}`),
+    ].join("\n")
+  } catch (error) {
+    logError("managed_agent_capacity_error", error, {
+      subjectHeader,
+      resource: CAPACITY_RESOURCE,
+      plan: CAPACITY_PLAN,
+    })
+    return ""
+  }
 }
 
 export function escapeMarkdownV2(input: string): string {
@@ -1251,6 +1757,12 @@ function requiredEnv(name: string): string {
   return v
 }
 
+function requiredPositiveInt(value: string | undefined, error: string): number {
+  const n = toInt(value)
+  if (typeof n !== "number" || n <= 0) throw new Error(error)
+  return n
+}
+
 function loadEnvFromDotFile(): void {
   const envPath = resolve(process.cwd(), ".env")
   if (!existsSync(envPath)) return
@@ -1270,6 +1782,11 @@ function loadEnvFromDotFile(): void {
 
 function log(event: string, fields: Record<string, unknown>): void {
   console.log(JSON.stringify({ level: "info", event, ...fields }))
+}
+
+function tokenPreview(token: string): string {
+  const value = String(token || "").trim()
+  return value ? value.slice(0, 12) : "unknown"
 }
 
 function logError(

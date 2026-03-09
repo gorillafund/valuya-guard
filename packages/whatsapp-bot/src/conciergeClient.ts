@@ -34,17 +34,26 @@ export class ConciergeClient {
   private readonly webhookUrl: string
   private readonly maxRetries: number
   private readonly initialBackoffMs: number
+  private readonly requestTimeoutMs: number
 
-  constructor(args: { webhookUrl: string; maxRetries?: number; initialBackoffMs?: number }) {
+  constructor(args: {
+    webhookUrl: string
+    maxRetries?: number
+    initialBackoffMs?: number
+    requestTimeoutMs?: number
+  }) {
     this.webhookUrl = args.webhookUrl
     this.maxRetries = args.maxRetries ?? 3
     this.initialBackoffMs = args.initialBackoffMs ?? 300
+    this.requestTimeoutMs = args.requestTimeoutMs ?? 8_000
   }
 
   async call(payload: ConciergePayload): Promise<ConciergeResponse> {
     const requestId = randomUUID()
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs)
       try {
         const response = await fetch(this.webhookUrl, {
           method: "POST",
@@ -54,6 +63,7 @@ export class ConciergeClient {
             "X-Request-Id": requestId,
           },
           body: JSON.stringify(payload),
+          signal: controller.signal,
         })
 
         const body = await safeParseJson(response)
@@ -69,8 +79,15 @@ export class ConciergeClient {
 
         return body as ConciergeResponse
       } catch (error) {
-        if (attempt >= this.maxRetries) throw error
+        if (attempt >= this.maxRetries) {
+          if (isAbortError(error)) {
+            throw new Error(`concierge_timeout_after_${this.requestTimeoutMs}ms`)
+          }
+          throw error
+        }
         await sleep(this.initialBackoffMs * Math.pow(2, attempt - 1))
+      } finally {
+        clearTimeout(timeout)
       }
     }
 
@@ -99,4 +116,8 @@ function shouldRetryStatus(status: number): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError"
 }

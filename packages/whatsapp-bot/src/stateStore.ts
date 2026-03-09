@@ -19,8 +19,44 @@ export type ConversationState = {
   updatedAt: string
 }
 
+export type StoredChannelLink = {
+  whatsapp_user_id: string
+  whatsapp_profile_name?: string
+  tenant_id?: string
+  channel_app_id: string
+  valuya_subject_id?: string
+  valuya_subject_type?: string
+  valuya_subject_external_id?: string
+  valuya_privy_user_id?: string
+  valuya_linked_wallet_address?: string
+  valuya_privy_wallet_id?: string
+  valuya_protocol_subject_type?: string
+  valuya_protocol_subject_id?: string
+  valuya_protocol_subject_header?: string
+  status: string
+  linked_at: string
+  meta?: Record<string, unknown>
+  updated_at: string
+}
+
+export type StoredMarketplaceOrderLink = {
+  local_order_id: string
+  valuya_order_id: string
+  checkout_url: string
+  guard_subject_id?: string
+  guard_subject_type?: string
+  guard_subject_external_id?: string
+  protocol_subject_header: string
+  amount_cents: number
+  currency: string
+  status?: string
+  updated_at: string
+}
+
 type PersistedState = {
   conversations: Record<string, ConversationState>
+  channelLinks: Record<string, StoredChannelLink>
+  marketplaceOrderLinks: Record<string, StoredMarketplaceOrderLink>
 }
 
 export class FileStateStore {
@@ -63,15 +99,92 @@ export class FileStateStore {
     }
   }
 
+  async getChannelLink(whatsappUserId: string): Promise<StoredChannelLink | null> {
+    const state = await this.readAll()
+    return state.channelLinks[whatsappUserId] ?? null
+  }
+
+  async upsertChannelLink(whatsappUserId: string, patch: Partial<StoredChannelLink>): Promise<StoredChannelLink> {
+    const state = await this.readAll()
+    const current = state.channelLinks[whatsappUserId]
+    const now = new Date().toISOString()
+    const nextStatus = patch.status ?? current?.status ?? "linked"
+    const linkedAt = patch.linked_at ?? current?.linked_at ?? now
+
+    const merged: StoredChannelLink = {
+      whatsapp_user_id: patch.whatsapp_user_id ?? current?.whatsapp_user_id ?? whatsappUserId,
+      whatsapp_profile_name: patch.whatsapp_profile_name ?? current?.whatsapp_profile_name,
+      tenant_id: patch.tenant_id ?? current?.tenant_id,
+      channel_app_id: patch.channel_app_id ?? current?.channel_app_id ?? "whatsapp_main",
+      valuya_subject_id: patch.valuya_subject_id ?? current?.valuya_subject_id,
+      valuya_subject_type: patch.valuya_subject_type ?? current?.valuya_subject_type,
+      valuya_subject_external_id: patch.valuya_subject_external_id ?? current?.valuya_subject_external_id,
+      valuya_privy_user_id: patch.valuya_privy_user_id ?? current?.valuya_privy_user_id,
+      valuya_linked_wallet_address: patch.valuya_linked_wallet_address ?? current?.valuya_linked_wallet_address,
+      valuya_privy_wallet_id: patch.valuya_privy_wallet_id ?? current?.valuya_privy_wallet_id,
+      valuya_protocol_subject_type:
+        patch.valuya_protocol_subject_type ?? current?.valuya_protocol_subject_type,
+      valuya_protocol_subject_id:
+        patch.valuya_protocol_subject_id ?? current?.valuya_protocol_subject_id,
+      valuya_protocol_subject_header:
+        patch.valuya_protocol_subject_header ?? current?.valuya_protocol_subject_header,
+      status: nextStatus,
+      linked_at: linkedAt,
+      meta: patch.meta ? { ...(current?.meta || {}), ...patch.meta } : current?.meta,
+      updated_at: now,
+    }
+
+    if (!merged.whatsapp_user_id.trim()) throw new Error("state_whatsapp_user_id_required")
+    if (!merged.channel_app_id.trim()) throw new Error("state_channel_app_id_required")
+    if (!merged.status.trim()) throw new Error("state_channel_link_status_required")
+
+    state.channelLinks[whatsappUserId] = merged
+    await this.writeAll(state)
+    return merged
+  }
+
+  async upsertMarketplaceOrderLink(
+    localOrderId: string,
+    patch: Omit<StoredMarketplaceOrderLink, "local_order_id" | "updated_at">,
+  ): Promise<StoredMarketplaceOrderLink> {
+    const state = await this.readAll()
+    const merged: StoredMarketplaceOrderLink = {
+      local_order_id: localOrderId,
+      valuya_order_id: String(patch.valuya_order_id || "").trim(),
+      checkout_url: String(patch.checkout_url || "").trim(),
+      guard_subject_id: patch.guard_subject_id,
+      guard_subject_type: patch.guard_subject_type,
+      guard_subject_external_id: patch.guard_subject_external_id,
+      protocol_subject_header: String(patch.protocol_subject_header || "").trim(),
+      amount_cents: Math.trunc(Number(patch.amount_cents || 0)),
+      currency: String(patch.currency || "").trim() || "EUR",
+      status: patch.status,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (!merged.valuya_order_id) throw new Error("marketplace_order_id_required")
+    if (!merged.checkout_url) throw new Error("marketplace_checkout_url_required")
+    if (!merged.protocol_subject_header) throw new Error("marketplace_protocol_subject_required")
+    if (!Number.isFinite(merged.amount_cents) || merged.amount_cents <= 0) {
+      throw new Error("marketplace_amount_required")
+    }
+
+    state.marketplaceOrderLinks[localOrderId] = merged
+    await this.writeAll(state)
+    return merged
+  }
+
   private async readAll(): Promise<PersistedState> {
     try {
       const raw = await readFile(this.filePath, "utf8")
       const parsed = JSON.parse(raw) as PersistedState
       return {
         conversations: parsed?.conversations ?? {},
+        channelLinks: parsed?.channelLinks ?? {},
+        marketplaceOrderLinks: parsed?.marketplaceOrderLinks ?? {},
       }
     } catch {
-      return { conversations: {} }
+      return { conversations: {}, channelLinks: {}, marketplaceOrderLinks: {} }
     }
   }
 

@@ -7,6 +7,7 @@ Telegram bot app that forwards user actions to an n8n webhook implementing Valuy
 - Sends normal text messages to n8n as `action: "recipe"`
 - Calls `GET /api/v2/agent/whoami` to expose current agent identity to the user
 - Requires explicit user consent via inline button before running paid actions
+- Supports secure account linking via Telegram deep-link `/start <token>` flow
 - Handles payment gating from n8n (`HTTP 402 payment_required`)
 - Handles inline callback actions:
   - `confirm:<orderId>`
@@ -60,7 +61,9 @@ For normal user text:
 {
   "resource": "telegram:bot:alfies:order",
   "plan": "standard",
-  "subject": { "type": "telegram", "id": "<telegramUserId>" },
+  "subject": { "type": "<linked_subject_type>", "id": "<linked_subject_external_id>" },
+  "actor_type": "agent",
+  "channel": "telegram",
   "action": "recipe",
   "message": "<text>",
   "orderId": "<generated UUID if missing>"
@@ -80,8 +83,13 @@ For `/status`:
 
 For `/start` and `/whoami`:
 
+- `/start <token>` redeems Guard link token and stores tenant-scoped Telegram channel link
 - `/start` shows identity + consent button
 - `/whoami` shows current agent identity from Valuya
+- `/start`, `/status`, and `/whoami` also show managed-agent capacity in linked user context:
+  - wallet balance
+  - spendable overall
+  - spendable for this bot right now
 
 ## Configuration
 
@@ -92,6 +100,12 @@ Set env vars:
 - or `N8N_BASE_URL` (bot appends `/webhook/valuya/agent/run`)
 - `VALUYA_TENANT_TOKEN` (required for `whoami` identity lookup)
 - `VALUYA_BASE_URL` (optional, defaults to `https://pay.gorilla.build`)
+- `VALUYA_PAYMENT_ASSET` (optional, defaults to `EURe`)
+- `VALUYA_PAYMENT_CURRENCY` (optional, defaults to `EUR`)
+- `TELEGRAM_CHANNEL_APP_ID` (optional, defaults to `telegram_main`)
+- `TELEGRAM_LINKS_FILE` (optional, defaults to `.data/telegram-links.json`)
+- `TELEGRAM_CAPACITY_RESOURCE` (optional, defaults to the bot resource)
+- `TELEGRAM_CAPACITY_PLAN` (optional, defaults to `standard`)
 
 See `.env.example`.
 

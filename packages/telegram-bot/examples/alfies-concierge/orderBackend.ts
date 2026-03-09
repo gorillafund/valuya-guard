@@ -23,6 +23,10 @@ export type OrderPayload = {
   meta: {
     recipe_title?: string
     total_cents?: number
+    actor_type?: string
+    channel?: string
+    subject_type?: string
+    subject_external_id?: string
   }
 }
 

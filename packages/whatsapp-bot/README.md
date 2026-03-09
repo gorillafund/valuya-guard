@@ -7,8 +7,13 @@ WhatsApp bot for the Alfies concierge flow using Twilio inbound webhooks, `@valu
 - Receives inbound WhatsApp messages via `POST /twilio/whatsapp/webhook`
 - Calls the same n8n concierge endpoint used by Telegram (`recipe`, `alt`, `confirm`)
 - Uses keyword replies (no inline buttons): `order`, `alt`, `cancel`, `status`
-- Runs Valuya whoami + agent payment flow on `order`
-- Posts confirmed orders to `/api/agent/orders` for backend email/CSV dispatch
+- Supports secure Valuya account linking via `LINK gls_...` messages
+- Shows managed-agent capacity on successful onboarding link and `status`:
+  - wallet balance
+  - spendable overall
+  - spendable for this WhatsApp bot right now
+- Runs Valuya whoami + delegated Guard payment flow on `order`
+- After successful payment, posts confirmed orders to `/api/agent/orders` for backend email/CSV dispatch
 - Responds using TwiML plain text
 
 ## Environment
@@ -21,13 +26,12 @@ Required for base flow:
 - `N8N_CONCIERGE_URL`
 - `VALUYA_GUARD_BASE_URL` (or `VALUYA_BASE`)
 - `VALUYA_TENANT_TOKEN`
+- `WHATSAPP_CHANNEL_APP_ID` (default `whatsapp_main`)
 - `VALUYA_BACKEND_BASE_URL`
 - `VALUYA_BACKEND_TOKEN`
-
-Required for automatic on-chain payment execution:
-
-- `VALUYA_PRIVATE_KEY`
-- `VALUYA_RPC_URL`
+- `VALUYA_ORDER_RESOURCE` (preferred payment/entitlement resource for marketplace + Guard autopay)
+- `VALUYA_PAYMENT_ASSET` (optional, defaults to `EURe`)
+- `VALUYA_PAYMENT_CURRENCY` (optional, defaults to `EUR`)
 
 ## Twilio WhatsApp setup
 
@@ -72,3 +76,4 @@ Twilio webhook payload is form-encoded. The bot validates `X-Twilio-Signature` w
 - State persistence is JSON file based (`WHATSAPP_STATE_FILE`).
 - TODO: migrate to SQLite for stronger multi-instance consistency.
 - Outbound helper exists (`sendProactiveWhatsApp`) and can be used for proactive notifications.
+- Keep `VALUYA_ORDER_RESOURCE` separate from `WHATSAPP_PAID_CHANNEL_RESOURCE`. The first is the resource used for marketplace order creation, delegated payment, and entitlement polling. The second is only for paid WhatsApp-channel access.

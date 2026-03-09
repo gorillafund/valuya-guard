@@ -1,4 +1,9 @@
 export type TelegramSubject = { type: string; id: string }
+export { TelegramPaidChannelAccessService, buildTelegramChannelResource } from "./paidChannel.js"
+export type {
+  TelegramPaidChannelAccessConfig,
+  TelegramChannelAccessResult,
+} from "./paidChannel.js"
 
 export type TelegramUser = {
   id: string | number

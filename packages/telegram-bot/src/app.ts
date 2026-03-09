@@ -1,16 +1,37 @@
 import { randomUUID } from "node:crypto"
+import { resolve } from "node:path"
+import { GuardTelegramLinkService, extractStartLinkToken } from "./channelLinking.js"
+import { TelegramLinkStore } from "./linkStore.js"
+import {
+  fetchManagedAgentCapacity,
+  formatCapacityAmount,
+  summarizeManagedAgentCapacity,
+} from "./managedAgentCapacity.js"
+import { TelegramPaidChannelAccessService } from "./paidChannel.js"
 
 const TELEGRAM_BOT_TOKEN = requireEnv("TELEGRAM_BOT_TOKEN")
 const N8N_WEBHOOK_URL = resolveN8nWebhookUrl()
 const VALUYA_BASE_URL = (
   process.env.VALUYA_BASE_URL?.trim() || "https://pay.gorilla.build"
 ).replace(/\/$/, "")
-const VALUYA_TENANT_TOKEN = process.env.VALUYA_TENANT_TOKEN?.trim() || ""
+const VALUYA_TENANT_TOKEN = requireEnv("VALUYA_TENANT_TOKEN")
+const TELEGRAM_CHANNEL_APP_ID = process.env.TELEGRAM_CHANNEL_APP_ID?.trim() || "telegram_main"
+const TELEGRAM_LINKS_FILE =
+  process.env.TELEGRAM_LINKS_FILE?.trim() || resolve(process.cwd(), ".data/telegram-links.json")
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`
 
 const RESOURCE =
   "telegram:bot:8748562521_aagildb2h9wfenj7uh5snityv-7zukwdj5o:recipe_confirm_alt_cancel_status"
 const PLAN = "standard"
+const CAPACITY_RESOURCE = process.env.TELEGRAM_CAPACITY_RESOURCE?.trim() || RESOURCE
+const CAPACITY_PLAN = process.env.TELEGRAM_CAPACITY_PLAN?.trim() || PLAN
+const CAPACITY_ASSET = process.env.VALUYA_PAYMENT_ASSET?.trim() || "EURe"
+const CAPACITY_CURRENCY = process.env.VALUYA_PAYMENT_CURRENCY?.trim() || "EUR"
+const TELEGRAM_CHANNEL_RESOURCE = process.env.TELEGRAM_PAID_CHANNEL_RESOURCE?.trim()
+const TELEGRAM_CHANNEL_PLAN = process.env.TELEGRAM_PAID_CHANNEL_PLAN?.trim() || "standard"
+const TELEGRAM_CHANNEL_INVITE_URL = process.env.TELEGRAM_PAID_CHANNEL_INVITE_URL?.trim()
+const TELEGRAM_CHANNEL_BOT = process.env.TELEGRAM_PAID_CHANNEL_BOT?.trim()
+const TELEGRAM_CHANNEL_NAME = process.env.TELEGRAM_PAID_CHANNEL_NAME?.trim()
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 300
 const TELEGRAM_POLL_TIMEOUT_SECONDS = 25
@@ -19,7 +40,7 @@ const WHOAMI_CACHE_TTL_MS = 5 * 60 * 1000
 type BotAction = "recipe" | "confirm" | "alt" | "cancel" | "status"
 
 type BotSubject = {
-  type: "telegram"
+  type: string
   id: string
 }
 
@@ -27,6 +48,8 @@ type N8nRequest = {
   resource: string
   plan: string
   subject: BotSubject
+  actor_type?: "agent"
+  channel?: "telegram"
   action: BotAction
   message?: string
   orderId?: string
@@ -119,6 +142,15 @@ type WhoamiSummary = {
 const lastOrderByUser = new Map<string, string>()
 const consentByUser = new Map<string, boolean>()
 let whoamiCache: { value: WhoamiSummary | null; expiresAt: number } | null = null
+const linkStore = new TelegramLinkStore(TELEGRAM_LINKS_FILE)
+const guardLinking = new GuardTelegramLinkService({
+  baseUrl: VALUYA_BASE_URL,
+  tenantToken: VALUYA_TENANT_TOKEN,
+  channelAppId: TELEGRAM_CHANNEL_APP_ID,
+  linkStore,
+  logger: (event, fields) => logEvent(event, fields),
+})
+const paidChannelAccess = createPaidChannelAccessServiceOrNull()
 
 void runBot()
 
@@ -127,6 +159,8 @@ async function runBot(): Promise<void> {
     webhook: N8N_WEBHOOK_URL,
     resource: RESOURCE,
     plan: PLAN,
+    channelAppId: TELEGRAM_CHANNEL_APP_ID,
+    linksFile: TELEGRAM_LINKS_FILE,
   })
 
   let offset = 0
@@ -166,24 +200,40 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
   const from = message.from
   if (!text || !from) return
 
-  if (text === "/start") {
-    await sendStartMessage(message.chat.id, String(from.id))
+  if (/^\/start(?:@\w+)?(?:\s+\S+)?$/i.test(text)) {
+    await handleStartCommand(message.chat.id, from, text)
     return
   }
 
   if (text === "/whoami") {
-    await sendWhoamiMessage(message.chat.id)
+    const linked = await resolveLinkedSubjectForInfo({
+      telegramUserId: String(from.id),
+      telegramUsername: from.username,
+    })
+    await sendWhoamiMessage(message.chat.id, linked)
     return
   }
 
   if (text === "/status") {
-    await handleStatusCommand(message.chat.id, from.id)
+    await handleStatusCommand(message.chat.id, { id: from.id, username: from.username })
+    return
+  }
+
+  if (text === "/channel") {
+    await handleChannelAccessCommand(message.chat.id, { id: from.id, username: from.username })
     return
   }
 
   if (text.startsWith("/")) return
 
   const userId = String(from.id)
+  const linked = await resolveLinkedSubjectForAction({
+    telegramUserId: userId,
+    telegramUsername: from.username,
+    chatId: message.chat.id,
+  })
+  if (!linked) return
+
   if (!hasUserConsent(userId)) {
     await sendConsentPrompt(message.chat.id)
     return
@@ -197,7 +247,9 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
   const payload: N8nRequest = {
     resource: RESOURCE,
     plan: PLAN,
-    subject: toSubject(from.id),
+    subject: linked,
+    actor_type: "agent",
+    channel: "telegram",
     action: "recipe",
     message: text,
     orderId,
@@ -221,15 +273,24 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
 
 async function handleStatusCommand(
   chatId: number,
-  telegramUserId: number,
+  telegramUser: { id: number; username?: string },
 ): Promise<void> {
-  const userId = String(telegramUserId)
+  const userId = String(telegramUser.id)
+  const linked = await resolveLinkedSubjectForAction({
+    telegramUserId: userId,
+    telegramUsername: telegramUser.username,
+    chatId,
+  })
+  if (!linked) return
+
   const orderId = lastOrderByUser.get(userId)
 
   const primaryPayload: N8nRequest = {
     resource: RESOURCE,
     plan: PLAN,
-    subject: toSubject(telegramUserId),
+    subject: linked,
+    actor_type: "agent",
+    channel: "telegram",
     action: "status",
     orderId,
   }
@@ -238,6 +299,7 @@ async function handleStatusCommand(
     const statusResult = await callN8nWithRetry(primaryPayload)
     if (statusResult.status === 200 || statusResult.status === 402) {
       await handleN8nResponse(chatId, userId, statusResult)
+      await sendManagedCapacityMessage(chatId, linked)
       return
     }
 
@@ -245,13 +307,16 @@ async function handleStatusCommand(
       const fallbackPayload: N8nRequest = {
         resource: RESOURCE,
         plan: PLAN,
-        subject: toSubject(telegramUserId),
+        subject: linked,
+        actor_type: "agent",
+        channel: "telegram",
         action: "confirm",
         dryRun: true,
         orderId,
       }
       const fallbackResult = await callN8nWithRetry(fallbackPayload)
       await handleN8nResponse(chatId, userId, fallbackResult)
+      await sendManagedCapacityMessage(chatId, linked)
       return
     }
 
@@ -271,6 +336,58 @@ async function handleStatusCommand(
       "I hit a temporary error checking status. Please try /status again.",
     )
   }
+}
+
+async function handleChannelAccessCommand(
+  chatId: number,
+  telegramUser: { id: number; username?: string },
+): Promise<void> {
+  if (!paidChannelAccess) {
+    await sendMessage(chatId, "Paid channel access is not configured for this bot.")
+    return
+  }
+  try {
+    const access = await paidChannelAccess.resolveAccess({
+      telegramUserId: String(telegramUser.id),
+      telegramUsername: telegramUser.username,
+    })
+    if (!access.allowed) {
+      await sendMessage(chatId, access.reply)
+      return
+    }
+    if (access.joinUrl) {
+      await sendMessage(chatId, "Access granted. Join here:", {
+        inline_keyboard: [[{ text: "Join premium channel", url: access.joinUrl }]],
+      })
+      return
+    }
+    await sendMessage(
+      chatId,
+      "Access is active. Channel invite automation is not configured yet. Contact support to receive your invite.",
+    )
+  } catch (error) {
+    logError("telegram_channel_access_error", error, {
+      telegramUserId: String(telegramUser.id),
+    })
+    await sendMessage(chatId, "I could not verify channel access right now. Please retry.")
+  }
+}
+
+function createPaidChannelAccessServiceOrNull(): TelegramPaidChannelAccessService | null {
+  const hasExplicit = Boolean(TELEGRAM_CHANNEL_RESOURCE)
+  const hasParts = Boolean(TELEGRAM_CHANNEL_BOT && TELEGRAM_CHANNEL_NAME)
+  if (!hasExplicit && !hasParts) return null
+  return new TelegramPaidChannelAccessService({
+    baseUrl: VALUYA_BASE_URL,
+    tenantToken: VALUYA_TENANT_TOKEN,
+    linking: guardLinking,
+    channelResource: TELEGRAM_CHANNEL_RESOURCE,
+    channelBot: TELEGRAM_CHANNEL_BOT,
+    channelName: TELEGRAM_CHANNEL_NAME,
+    channelPlan: TELEGRAM_CHANNEL_PLAN,
+    channelInviteUrl: TELEGRAM_CHANNEL_INVITE_URL,
+    logger: (event, fields) => logEvent(event, fields),
+  })
 }
 
 async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
@@ -304,12 +421,24 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
     return
   }
 
+  const linked = await resolveLinkedSubjectForAction({
+    telegramUserId: String(query.from.id),
+    telegramUsername: query.from.username,
+    chatId,
+  })
+  if (!linked) {
+    await answerCallbackQuery(query.id, "Link your Valuya account first.")
+    return
+  }
+
   const whoami = await getWhoamiSummarySafe()
 
   const payload: N8nRequest = {
     resource: RESOURCE,
     plan: PLAN,
-    subject: toSubject(query.from.id),
+    subject: linked,
+    actor_type: "agent",
+    channel: "telegram",
     action: parsed.action,
     orderId: parsed.orderId,
     agentWhoami: whoami || undefined,
@@ -329,8 +458,106 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
   }
 }
 
-function toSubject(telegramUserId: number): BotSubject {
-  return { type: "telegram", id: String(telegramUserId) }
+function toSubjectFromLinked(input: { type: string; externalId: string }): BotSubject {
+  return { type: input.type, id: input.externalId }
+}
+
+async function handleStartCommand(
+  chatId: number,
+  from: { id: number; username?: string },
+  text: string,
+): Promise<void> {
+  const userId = String(from.id)
+  const token = extractStartLinkToken(text)
+  let linkedSubject: BotSubject | null = null
+
+  if (token) {
+    logEvent("link_attempt", {
+      channel: "telegram",
+      telegramUserId: userId,
+      tokenPrefix: token.slice(0, 8),
+    })
+
+    const redeemed = await guardLinking.redeemLinkToken({
+      telegramUserId: userId,
+      telegramUsername: from.username,
+      linkToken: token,
+    })
+
+    if (redeemed.linked) {
+      linkedSubject = toSubjectFromLinked({
+        type: redeemed.subject.type,
+        externalId: redeemed.subject.externalId,
+      })
+      logEvent("link_success", {
+        channel: "telegram",
+        telegramUserId: userId,
+        source: redeemed.source,
+        tenantId: redeemed.link.tenant_id,
+        subjectType: redeemed.subject.type,
+        protocolSubjectHeader: redeemed.link.valuya_protocol_subject_header || null,
+        walletAddress: redeemed.link.valuya_linked_wallet_address || null,
+        channelAppId: redeemed.link.channel_app_id,
+      })
+      await sendMessage(
+        chatId,
+        "Your Valuya account is now linked to this Telegram account.",
+      )
+    } else {
+      logEvent("link_failure", {
+        channel: "telegram",
+        telegramUserId: userId,
+        code: redeemed.code,
+        reason: redeemed.message,
+      })
+      await sendMessage(chatId, redeemed.message)
+    }
+  }
+
+  if (!linkedSubject) {
+    linkedSubject = await resolveLinkedSubjectForInfo({
+      telegramUserId: userId,
+      telegramUsername: from.username,
+    })
+  }
+
+  await sendStartMessage(chatId, userId, linkedSubject)
+}
+
+async function resolveLinkedSubjectForAction(args: {
+  telegramUserId: string
+  telegramUsername?: string
+  chatId: number
+}): Promise<BotSubject | null> {
+  const resolved = await guardLinking.ensureLinkedForPaymentAction({
+    telegramUserId: args.telegramUserId,
+    telegramUsername: args.telegramUsername,
+  })
+
+  if (!resolved.allowed) {
+    await sendMessage(args.chatId, resolved.reply)
+    return null
+  }
+
+  return toSubjectFromLinked({
+    type: resolved.subject.type,
+    externalId: resolved.subject.externalId,
+  })
+}
+
+async function resolveLinkedSubjectForInfo(args: {
+  telegramUserId: string
+  telegramUsername?: string
+}): Promise<BotSubject | null> {
+  const resolved = await guardLinking.resolveLinkedSubject({
+    telegramUserId: args.telegramUserId,
+    telegramUsername: args.telegramUsername,
+  })
+  if (!resolved.linked) return null
+  return toSubjectFromLinked({
+    type: resolved.subject.type,
+    externalId: resolved.subject.externalId,
+  })
 }
 
 async function callN8nWithRetry(payload: N8nRequest): Promise<N8nResponse> {
@@ -632,12 +859,19 @@ function hasUserConsent(userId: string): boolean {
   return consentByUser.get(userId) === true
 }
 
-async function sendStartMessage(chatId: number, userId: string): Promise<void> {
+async function sendStartMessage(
+  chatId: number,
+  userId: string,
+  linkedSubject?: BotSubject | null,
+): Promise<void> {
   const whoami = await getWhoamiSummarySafe()
+  const capacityLines = await buildManagedCapacityLines(linkedSubject || null)
   const lines = [
     "Hi, I am Alfies Concierge.",
     "I can propose recipes and run payment-gated actions.",
     "",
+    ...capacityLines,
+    ...(capacityLines.length > 0 ? [""] : []),
     ...formatWhoamiLines(whoami),
     "",
     hasUserConsent(userId)
@@ -656,9 +890,16 @@ async function sendStartMessage(chatId: number, userId: string): Promise<void> {
   await sendMessage(chatId, lines.join("\n"), keyboard)
 }
 
-async function sendWhoamiMessage(chatId: number): Promise<void> {
+async function sendWhoamiMessage(chatId: number, linkedSubject?: BotSubject | null): Promise<void> {
   const whoami = await getWhoamiSummarySafe()
-  await sendMessage(chatId, formatWhoamiLines(whoami).join("\n"))
+  const capacityLines = await buildManagedCapacityLines(linkedSubject || null)
+  await sendMessage(
+    chatId,
+    [
+      ...formatWhoamiLines(whoami),
+      ...(capacityLines.length > 0 ? ["", ...capacityLines] : []),
+    ].join("\n"),
+  )
 }
 
 async function sendConsentPrompt(chatId: number): Promise<void> {
@@ -689,6 +930,47 @@ function formatWhoamiLines(whoami: WhoamiSummary | null): string[] {
     `- tenant: ${whoami.tenant || "n/a"}`,
     `- scopes: ${(whoami.scopes && whoami.scopes.length > 0) ? whoami.scopes.join(", ") : "n/a"}`,
   ]
+}
+
+async function sendManagedCapacityMessage(
+  chatId: number,
+  linkedSubject: BotSubject,
+): Promise<void> {
+  const capacityLines = await buildManagedCapacityLines(linkedSubject)
+  if (capacityLines.length === 0) return
+  await sendMessage(chatId, capacityLines.join("\n"))
+}
+
+async function buildManagedCapacityLines(linkedSubject: BotSubject | null): Promise<string[]> {
+  if (!linkedSubject) return []
+
+  const subjectHeader = `${linkedSubject.type}:${linkedSubject.id}`
+  try {
+    const response = await fetchManagedAgentCapacity({
+      baseUrl: VALUYA_BASE_URL,
+      tenantToken: VALUYA_TENANT_TOKEN,
+      subjectHeader,
+      resource: CAPACITY_RESOURCE,
+      plan: CAPACITY_PLAN,
+      asset: CAPACITY_ASSET,
+      currency: CAPACITY_CURRENCY,
+      logger: (event, fields) => logEvent(event, fields),
+    })
+    const summary = summarizeManagedAgentCapacity(response)
+    return [
+      "Managed agent capacity:",
+      `- wallet balance: ${formatCapacityAmount(summary.walletBalanceCents, summary.currency)}`,
+      `- spendable overall: ${formatCapacityAmount(summary.overallSpendableCents, summary.currency)}`,
+      `- spendable here right now: ${formatCapacityAmount(summary.botSpendableNowCents, summary.currency)}`,
+    ]
+  } catch (error) {
+    logError("managed_agent_capacity_error", error, {
+      subjectHeader,
+      resource: CAPACITY_RESOURCE,
+      plan: CAPACITY_PLAN,
+    })
+    return []
+  }
 }
 
 async function getWhoamiSummarySafe(): Promise<WhoamiSummary | null> {
