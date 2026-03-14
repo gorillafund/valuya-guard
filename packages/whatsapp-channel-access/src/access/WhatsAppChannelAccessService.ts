@@ -106,6 +106,14 @@ export class WhatsAppChannelAccessService {
       allowed: decision.allowed,
       reason: decision.state,
       expires_at: "expiresAt" in decision ? decision.expiresAt || null : null,
+      source: decision.source,
+      runtime_config_present: decision.runtimeConfig ? true : false,
+      runtime_config_mode: decision.runtimeConfig?.mode || null,
+      runtime_config_channel: decision.runtimeConfig?.channel || null,
+      runtime_config_channel_kind: decision.runtimeConfig?.channel_kind || null,
+      runtime_config_provider: decision.runtimeConfig?.provider || null,
+      runtime_config_soul_slug: decision.runtimeConfig?.soul?.slug || null,
+      runtime_config_soul_id: decision.runtimeConfig?.soul?.id || null,
     })
     return decision
   }

@@ -46,6 +46,7 @@ export function resolveChannelConfig(config: WhatsAppChannelAccessConfig) {
     resource,
     plan,
     channelUrl,
+    logger,
     channelMetadata: {
       kind: "whatsapp",
       provider: cleanOptional(config.channelProvider) || null,
@@ -56,7 +57,6 @@ export function resolveChannelConfig(config: WhatsAppChannelAccessConfig) {
     },
     allowEntitlementFallbackOnServerError: config.allowEntitlementFallbackOnServerError === true,
     linking: config.linking,
-    logger,
   }
 }
 

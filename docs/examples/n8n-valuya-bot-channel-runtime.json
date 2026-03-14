@@ -1,0 +1,81 @@
+{
+  "name": "Valuya Bot Channel Runtime",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "valuya-bot-channel-runtime",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "valuya-bot-channel-runtime"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json;\nconst schema = body.soul?.responseSchema || {};\nconst message = String(body.message || '').trim();\nconst lower = message.toLowerCase();\nconst replyKey = String(schema.replyKey || 'reply');\nconst followUpQuestionKey = schema.followUpQuestionKey ? String(schema.followUpQuestionKey) : '';\nconst nextStepKey = schema.nextStepKey ? String(schema.nextStepKey) : '';\nconst summaryKey = schema.summaryKey ? String(schema.summaryKey) : '';\nconst userProfileKey = schema.userProfileKey ? String(schema.userProfileKey) : '';\nconst rootPatternKey = schema.rootPatternKey ? String(schema.rootPatternKey) : '';\n\nlet pattern = 'clarity';\nif (/(stress|druck|ueberfordert|überfordert|erschöpft|erschoepft)/.test(lower)) pattern = 'stress';\nelse if (/(entscheidung|decide|option|wahl|choose)/.test(lower)) pattern = 'decision';\nelse if (/(kunde|support|bug|problem|fehler|issue)/.test(lower)) pattern = 'support';\n\nconst descriptions = {\n  stress: 'pressure and overload',\n  decision: 'a decision that still needs shape',\n  support: 'a concrete support issue',\n  clarity: 'something that needs more clarity',\n};\n\nconst questionsDe = {\n  stress: 'Was fuehlt sich daran gerade am engsten oder schwersten an?',\n  decision: 'Zwischen welchen zwei Optionen stehst du gerade wirklich?',\n  support: 'Was genau blockiert dich im Moment am staerksten?',\n  clarity: 'Wenn du dein Thema in einem Satz zuspitzen muesstest, wie wuerde er lauten?',\n};\n\nconst nextStepsDe = {\n  stress: 'Nenne zuerst nur den einen Teil, den du heute beeinflussen kannst.',\n  decision: 'Schreibe die wichtigste Abwaegung in einem kurzen Satz auf.',\n  support: 'Beschreibe zuerst den letzten Schritt vor dem Fehler oder Hindernis.',\n  clarity: 'Formuliere zuerst, was du dir nach diesem Gespraech konkret erhoffst.',\n};\n\nconst locale = String(body.locale || body.soul?.locale || 'de');\nconst soulName = String(body.soul?.name || body.soul?.id || 'Assistant');\nconst previousSummary = Array.isArray(body.memory?.summaries) ? body.memory.summaries.at(-1) : null;\nconst reply = [\n  `${soulName}: Ich habe dein Anliegen aufgenommen.`,\n  previousSummary ? `Ich habe noch im Blick: ${previousSummary}` : null,\n  `Im Moment klingt es fuer mich vor allem nach ${descriptions[pattern]}.`,\n].filter(Boolean).join(' ');\n\nconst response = {\n  [replyKey]: reply,\n};\n\nif (followUpQuestionKey) response[followUpQuestionKey] = questionsDe[pattern];\nif (nextStepKey) response[nextStepKey] = nextStepsDe[pattern];\nif (summaryKey) response[summaryKey] = `Thema: ${descriptions[pattern]}. Nachricht: ${message.slice(0, 140)}`;\nif (userProfileKey) response[userProfileKey] = {\n  preferred_language: locale,\n  current_focus: pattern,\n};\nif (rootPatternKey) response[rootPatternKey] = pattern;\n\nreturn [{ json: response }];"
+      },
+      "id": "build-response-node",
+      "name": "Build Structured Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        860,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Structured Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Structured Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "valuya-bot-channel-runtime-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

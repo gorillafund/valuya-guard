@@ -431,6 +431,71 @@ test("runtime routes active users to configured soul and persists memory", async
   })
 })
 
+test("runtime matches backend soul slug case-insensitively", async () => {
+  const access = new WhatsAppChannelAccessService({
+    baseUrl: "https://guard.example",
+    tenantToken: "ttok_123",
+    channelResource: "whatsapp:channel:meta:mentor:49123",
+    channelPlan: "standard",
+    linking: {
+      ensureLinkedForPaymentAction: async () => ({
+        allowed: true,
+        link: { valuya_protocol_subject_header: "user:17" },
+      }),
+    },
+  })
+
+  const runtime = new WhatsAppChannelRuntime({
+    access,
+    mode: { kind: "agent", soulId: "mentor" },
+    souls: [{
+      id: "mentor",
+      name: "Mentor",
+      systemPrompt: "Du bist ein Mentor.",
+    }],
+    soulRuntime: new StaticSoulRuntime("Ich denke mit dir darueber nach."),
+    memoryStore: new InMemoryMemoryStore(),
+  })
+
+  await withMockFetch([{
+    status: 200,
+    body: {
+      ok: true,
+      state: "paid_active",
+      resource: "whatsapp:channel:meta:mentor:49123",
+      anchor_resource: "whatsapp:channel:meta:mentor:49123",
+      plan: "standard",
+      expires_at: null,
+      payment_url: null,
+      reason: "mandate_active",
+      runtime_config: {
+        mode: "agent",
+        channel: "whatsapp",
+        channel_kind: "channel",
+        provider: "meta",
+        channel_app_id: "whatsapp_main",
+        visit_url: null,
+        human_routing: null,
+        agent_routing: { entrypoint: "channel-runtime" },
+        soul: {
+          id: 1,
+          slug: "Mentor",
+          name: "mentor",
+          version: 2,
+        },
+      },
+      capabilities: { channel_access_version: "1" },
+    },
+  }], async () => {
+    const result = await runtime.handleMessage({
+      whatsappUserId: "49123",
+      body: "Hallo",
+    })
+
+    assert.equal(result.kind, "agent")
+  })
+})
+
 test("allowed access with null runtime_config does not invent a runtime", async () => {
   const access = new WhatsAppChannelAccessService({
     baseUrl: "https://guard.example",

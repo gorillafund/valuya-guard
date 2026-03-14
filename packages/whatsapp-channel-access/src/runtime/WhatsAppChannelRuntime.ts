@@ -1,5 +1,6 @@
 import type {
   ChannelMode,
+  LogFn,
   SoulConfig,
   SoulDefinition,
   SoulMemory,
@@ -22,6 +23,7 @@ export class WhatsAppChannelRuntime {
     memoryStore: MemoryStore
     soulRuntime?: SoulRuntime
     souls?: SoulDefinition[]
+    logger?: LogFn
   }) {}
 
   async handleMessage(args: {
@@ -44,6 +46,10 @@ export class WhatsAppChannelRuntime {
 
     const resolvedMode = this.resolveMode(access)
     if (resolvedMode.kind === "none") {
+      this.logRuntimeDecision(args, access, {
+        runtime_kind: "allowed",
+        backend_runtime_config_present: access.runtimeConfig ? true : false,
+      })
       return {
         kind: "allowed",
         access,
@@ -57,6 +63,15 @@ export class WhatsAppChannelRuntime {
     }
 
     if (resolvedMode.kind === "runtime_error") {
+      this.logRuntimeDecision(args, access, {
+        runtime_kind: "runtime_error",
+        runtime_error: resolvedMode.error,
+        backend_runtime_config_present: access.runtimeConfig ? true : false,
+        backend_runtime_mode: access.runtimeConfig?.mode || null,
+        backend_soul_slug: access.runtimeConfig?.soul?.slug || null,
+        backend_soul_id: access.runtimeConfig?.soul?.id || null,
+        local_configured_soul_ids: this.deps.souls?.map((entry) => entry.id) || [],
+      })
       return {
         kind: "runtime_error",
         access,
@@ -67,6 +82,11 @@ export class WhatsAppChannelRuntime {
     }
 
     if (resolvedMode.kind === "human") {
+      this.logRuntimeDecision(args, access, {
+        runtime_kind: "human",
+        backend_runtime_config_present: access.runtimeConfig ? true : false,
+        backend_runtime_mode: access.runtimeConfig?.mode || null,
+      })
       return {
         kind: "human",
         access,
@@ -79,6 +99,13 @@ export class WhatsAppChannelRuntime {
     }
 
     const soul = resolvedMode.soul
+    this.logRuntimeDecision(args, access, {
+      runtime_kind: "agent",
+      backend_runtime_config_present: access.runtimeConfig ? true : false,
+      backend_runtime_mode: access.runtimeConfig?.mode || null,
+      matched_soul_id: soul.id,
+      matched_soul_name: soul.name,
+    })
     if (!this.deps.soulRuntime) throw new Error("whatsapp_channel_soul_runtime_missing")
 
     const memory = await this.deps.memoryStore.load({
@@ -139,11 +166,36 @@ export class WhatsAppChannelRuntime {
   }
 
   private matchSoulDefinition(soulConfig: SoulConfig): SoulDefinition | null {
-    const bySlug = this.deps.souls?.find((entry) => entry.id === soulConfig.slug)
+    const normalizedSlug = normalizeSoulKey(soulConfig.slug)
+    const bySlug = this.deps.souls?.find((entry) => normalizeSoulKey(entry.id) === normalizedSlug)
     if (bySlug) return bySlug
-    const byId = this.deps.souls?.find((entry) => entry.id === String(soulConfig.id))
+    const normalizedId = normalizeSoulKey(String(soulConfig.id))
+    const byId = this.deps.souls?.find((entry) => normalizeSoulKey(entry.id) === normalizedId)
     if (byId) return byId
+    const normalizedName = normalizeSoulKey(soulConfig.name)
+    const byName = this.deps.souls?.find((entry) => normalizeSoulKey(entry.name) === normalizedName)
+    if (byName) return byName
     return null
+  }
+
+  private logRuntimeDecision(
+    args: {
+      whatsappUserId: string
+      body: string
+      profileName?: string
+      locale?: string
+    },
+    access: Extract<Awaited<ReturnType<WhatsAppChannelAccessService["resolveAccess"]>>, { allowed: true }>,
+    extra: Record<string, unknown>,
+  ): void {
+    this.deps.logger?.("whatsapp_channel_runtime_decision", {
+      whatsapp_user_id: args.whatsappUserId,
+      protocol_subject_header: access.protocolSubjectHeader,
+      resource: access.resource,
+      plan: access.plan,
+      body_preview: args.body.slice(0, 120),
+      ...extra,
+    })
   }
 }
 
@@ -159,4 +211,8 @@ function appendMemory(memory: SoulMemory, userMessage: string, assistantReply: s
     recentTurns: nextTurns,
     updatedAt: new Date().toISOString(),
   }
+}
+
+function normalizeSoulKey(value: string): string {
+  return String(value || "").trim().toLowerCase()
 }

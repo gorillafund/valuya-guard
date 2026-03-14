@@ -1,7 +1,7 @@
 {
   "name": "@valuya/whatsapp-channel-access",
-  "version": "0.2.0-beta.1",
-  "description": "Reusable WhatsApp paid-channel entitlement checks for Valuya Guard bots",
+  "version": "0.2.0",
+  "description": "Reusable WhatsApp channel access and runtime primitives for Valuya Guard bots",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,17 +12,18 @@
     }
   },
   "files": [
-    "dist/index.js",
-    "dist/index.d.ts",
-    "README.md"
+    "dist",
+    "README.md",
+    "GUARD_CHANNEL_ACCESS_API.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "test": "pnpm run build && node --test dist/*.test.js",
+    "prepack": "find dist -type f \\( -name '*.test.js' -o -name '*.test.d.ts' \\) -delete",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "@valuya/channel-access-core": "workspace:^"
+    "@valuya/channel-access-core": "^0.2.0-beta.1"
   },
   "devDependencies": {
     "@types/node": "^25.0.10"

@@ -1,0 +1,44 @@
+{
+  "name": "@valuya/whatsapp-bot-channel",
+  "version": "0.2.0",
+  "description": "Gated WhatsApp channel example with human or soul-moderated runtime on top of Valuya Guard",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    ".env.example",
+    ".env.mentor.example",
+    ".env.support.example",
+    ".env.concierge.example"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "start": "pnpm run build && node dist/server.js",
+    "test": "pnpm run build && node --test dist/*.test.js dist/app/*.test.js",
+    "prepack": "find dist -type f \\( -name '*.test.js' -o -name '*.test.d.ts' \\) -delete",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@valuya/bot-channel-app-core": "^0.2.0",
+    "@valuya/bot-channel-bootstrap-core": "^0.2.0",
+    "@valuya/bot-channel-core": "^0.2.0",
+    "@valuya/bot-channel-server-core": "^0.2.0",
+    "@valuya/whatsapp-channel-access": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "license": "MIT"
+}

@@ -27,6 +27,9 @@ jobs:
       - name: Build scripts
         run: pnpm build
 
+      - name: Validate gated channel presets
+        run: node scripts/ci/check-gated-channel-presets.js
+
       - name: Build protocol package
         run: pnpm build:protocol
 

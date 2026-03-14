@@ -13,7 +13,7 @@ Phase 1 of this package is aimed at gated WhatsApp channels where a merchant can
 
 This package is intentionally narrower than `@valuya/whatsapp-bot-agent`. It is for channel access and channel conversations, not Alfies checkout orchestration.
 
-For the preferred backend contract for trial-aware channel access, see [GUARD_CHANNEL_ACCESS_API.md](/home/colt/Software/valuya-guard/packages/whatsapp-channel-access/GUARD_CHANNEL_ACCESS_API.md).
+For the preferred backend contract for trial-aware channel access, see [GUARD_CHANNEL_ACCESS_API.md](./GUARD_CHANNEL_ACCESS_API.md).
 
 ## What it does
 
