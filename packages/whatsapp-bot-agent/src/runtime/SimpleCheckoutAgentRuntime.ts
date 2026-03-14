@@ -834,6 +834,12 @@ export class SimpleCheckoutAgentRuntime implements AgentRuntime {
       }
 
       if (resolvedProduct.kind === "ambiguous") {
+        const ambiguousOptions = Array.isArray(resolvedProduct.options)
+          ? resolvedProduct.options
+          : []
+        const allOptionsLackProductIds =
+          ambiguousOptions.length > 0 &&
+          ambiguousOptions.every((option) => !readNumber((option as Record<string, unknown>).productId))
         const options = Array.isArray(resolvedProduct.options)
           ? resolvedProduct.options.map((option) => readString((option as Record<string, unknown>).title)).filter(Boolean)
           : []
@@ -843,16 +849,17 @@ export class SimpleCheckoutAgentRuntime implements AgentRuntime {
                 "Ich bin noch nicht sicher, welche Variante du meinst:",
                 ...options.map((option, index) => `${index + 1}. ${option}`),
                 "",
-                "Antworte einfach mit 1, 2, 3 ...",
-              ].join("\n")
+              "Antworte einfach mit 1, 2, 3 ...",
+            ].join("\n")
             : `Ich bin bei '${cartMutation.query}' noch nicht sicher genug. Bitte formuliere es etwas genauer.`,
           metadata: {
-            pendingProductOptions: Array.isArray(resolvedProduct.options) ? resolvedProduct.options : undefined,
+            pendingProductOptions: ambiguousOptions.length ? ambiguousOptions : undefined,
             pendingProductPrompt: "Welche Variante meinst du?",
+            ...(allOptionsLackProductIds ? { pendingBrowseType: "category" } : {}),
             pendingBrowseQuery: undefined,
             pendingBrowseCategory: undefined,
             pendingBrowsePage: undefined,
-            pendingMutation: cartMutation.kind,
+            pendingMutation: allOptionsLackProductIds ? undefined : cartMutation.kind,
             ...(cartMutation.kind === "set" ? { pendingQuantity: cartMutation.quantity } : {}),
           },
         }
@@ -1178,6 +1185,13 @@ function validatePlannerDecision(args: {
     return null
   }
 
+  if (
+    (decision.action === "add_item" || decision.action === "remove_item" || decision.action === "set_item_quantity")
+    && !looksLikeExplicitCartMutationMessage(normalizedMessage)
+  ) {
+    return null
+  }
+
   return decision
 }
 
@@ -1217,6 +1231,10 @@ function summarizePlannerContext(args: {
 function readCartSnapshot(session: ConversationSession): Record<string, unknown> | null {
   const value = session.metadata?.currentCartSnapshot
   return value && typeof value === "object" ? value as Record<string, unknown> : null
+}
+
+function looksLikeExplicitCartMutationMessage(value: string): boolean {
+  return /^(?:add|plus|remove|delete|pack(?:e)?|nimm|fueg(?:e)?|füg(?:e)?|ohne|entferne|loesch(?:e)?|lösche|setze|mach)\b/.test(value)
 }
 
 function findLatestToolOutput(session: ConversationSession, toolName: string): Record<string, unknown> | null {

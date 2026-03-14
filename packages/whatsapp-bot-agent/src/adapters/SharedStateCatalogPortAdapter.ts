@@ -107,7 +107,10 @@ export class SharedStateCatalogPortAdapter implements CatalogPort {
         })
         merged.push(...result.options.map(toBrowseOption))
       }
-      const options = dedupeBrowseOptions(rankIngredientOptions(ingredient, merged)).slice(0, 6)
+      const options = dedupeBrowseOptions(
+        rankIngredientOptions(ingredient, merged)
+          .filter((option) => !isForbiddenIngredientOption(ingredient, option)),
+      ).slice(0, 6)
       if (options.length) {
         groups.push({
           ingredient,
@@ -252,6 +255,12 @@ function buildIngredientRecipe(query: string): { title: string; ingredients: str
 }
 
 function inferNamedMealRecipe(normalized: string): { title: string; ingredients: string[] } | null {
+  if (/\bpaella\b/.test(normalized)) {
+    return {
+      title: "Paella",
+      ingredients: ["paella reis", "fond", "paprika", "erbsen", "safran"],
+    }
+  }
   if (/\btortellini\b/.test(normalized) && /\bpanna\b/.test(normalized)) {
     return {
       title: "Tortellini a la Panna",
@@ -352,6 +361,10 @@ function titleCase(value: string): string {
 function expandIngredientQueries(ingredient: string): string[] {
   const normalized = normalize(ingredient)
   const queries = [normalized]
+  if (normalized === "paella reis") queries.push("reis", "risottoreis")
+  if (normalized === "fond") queries.push("bruehe", "gemuese fond", "gemuesebruehe")
+  if (normalized === "erbsen") queries.push("tk erbsen", "erbsen")
+  if (normalized === "safran") queries.push("gewuerze")
   if (normalized === "fisch") queries.push("lachs", "kabeljau", "forelle")
   if (normalized === "gemuese") queries.push("brokkoli", "zucchini", "paprika", "karotte")
   if (normalized === "kartoffel") queries.push("kartoffeln")
@@ -380,7 +393,30 @@ function scoreIngredientOption(option: CatalogBrowseOption, ingredientTokens: st
   if (ingredientTokens.includes("fisch") && /\b(lachs|forelle|kabeljau|fisch|saibling|thunfisch)\b/.test(label)) score += 8
   if (ingredientTokens.includes("gemuese") && /\b(gemuese|brokkoli|zucchini|karotte|paprika|spinat|salat)\b/.test(label)) score += 8
   if (ingredientTokens.includes("kartoffel") && /\bkartoffel/.test(label)) score += 8
+  if (ingredientTokens.includes("reis") && /\b(reis|risotto|bomba)\b/.test(label)) score += 8
+  if (ingredientTokens.includes("fond") && /\b(fond|bruehe)\b/.test(label)) score += 8
+  if (ingredientTokens.includes("safran") && /\bsafran\b/.test(label)) score += 10
+  if (ingredientTokens.includes("erbse") && /\berbsen?\b/.test(label)) score += 8
   return score
+}
+
+function isForbiddenIngredientOption(ingredient: string, option: CatalogBrowseOption): boolean {
+  const normalizedIngredient = normalize(ingredient)
+  const label = normalize(option.label || option.value || "")
+
+  if (normalizedIngredient === "erbsen" && /\bbackerbsen\b/.test(label)) {
+    return true
+  }
+
+  if (normalizedIngredient === "fond" && /\b(knorr|maggi|fix|basis|chili con carne|bitte zu tisch)\b/.test(label)) {
+    return true
+  }
+
+  if (normalizedIngredient === "paella reis" && /\b(reiswaffel|milchreis|reisdrink)\b/.test(label)) {
+    return true
+  }
+
+  return false
 }
 
 function tokenize(value: string): string[] {

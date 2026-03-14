@@ -1240,6 +1240,90 @@ test("runtime ignores planner quantity updates without a target query", async ()
   assert.match(result.reply || "", /menge aendern willst/i)
 })
 
+test("runtime ignores planner add-item guesses for bare family browse messages like 'Reis'", async () => {
+  const planner: ShoppingPlanner = {
+    async plan() {
+      return {
+        action: "add_item",
+        confidence: 0.95,
+        query: "Reis",
+      }
+    },
+  }
+  const runtime = new SimpleCheckoutAgentRuntime({ planner })
+  const session: ConversationSession = {
+    conversationId: "c1",
+    whatsappUserId: "49123",
+    entries: [
+      {
+        role: "user",
+        content: "Reis",
+        createdAt: new Date(0).toISOString(),
+      },
+    ],
+    metadata: {},
+  }
+
+  const result = await runtime.runTurn({
+    linkedSubject: { protocolSubjectHeader: "app_user:1" },
+    session,
+    tools: [],
+  })
+
+  assert.equal(result.toolCalls?.[0]?.name, "catalog.browse_products")
+  assert.equal(result.toolCalls?.[0]?.input?.query, "reis")
+ })
+
+test("runtime treats category-like resolve-product ambiguities as browse selection instead of cart mutation", async () => {
+  const runtime = new SimpleCheckoutAgentRuntime({
+    planner: {
+      async plan() {
+        return {
+          action: "add_item",
+          confidence: 0.95,
+          query: "Reis",
+        }
+      },
+    },
+  })
+  const session: ConversationSession = {
+    conversationId: "c1",
+    whatsappUserId: "49123",
+    entries: [
+      {
+        role: "user",
+        content: "Reis",
+        createdAt: new Date(0).toISOString(),
+      },
+      {
+        role: "tool",
+        name: "catalog.resolve_product_query",
+        toolCallId: "tc_1",
+        content: JSON.stringify({
+          kind: "ambiguous",
+          options: [
+            { title: "Reis & Maiswaffeln", label: "Reis & Maiswaffeln", value: "Reis & Maiswaffeln" },
+            { title: "Reis, Getreide & Co", label: "Reis, Getreide & Co", value: "Reis, Getreide & Co" },
+          ],
+        }),
+        createdAt: new Date(0).toISOString(),
+      },
+    ],
+    metadata: {},
+  }
+
+  const result = await runtime.runTurn({
+    linkedSubject: { protocolSubjectHeader: "app_user:1" },
+    session,
+    tools: [],
+  })
+
+  assert.match(String(result.reply || ""), /welche Variante du meinst/i)
+  assert.equal(result.metadata?.pendingMutation, undefined)
+  assert.equal(result.metadata?.pendingBrowseType, "category")
+  assert.equal(Array.isArray(result.metadata?.pendingProductOptions), true)
+})
+
 test("runtime prioritizes planner quantity updates over browse parsing for messages like 'Bitte 3x Rama Cremefine'", async () => {
   const planner: ShoppingPlanner = {
     async plan() {
