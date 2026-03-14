@@ -93,6 +93,7 @@ publish_pkg() {
 
 # Dependency order matters:
 publish_pkg "@valuya/core"
+publish_pkg "@valuya/channel-access-core"
 publish_pkg "@valuya/protocol"
 publish_pkg "@valuya/agent"
 publish_pkg "@valuya/agentokratia-signer"
