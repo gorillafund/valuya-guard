@@ -99,3 +99,12 @@ sam-app/vendor/**/build/
 # -------------------------------------------------
 logs/
 *.out
+
+# -------------------------------------------------
+# Local runtime state
+# -------------------------------------------------
+.data/
+packages/whatsapp-bot-channel/.data/
+packages/whatsapp-bot/.data/whatsapp-state.json
+packages/whatsapp-bot/.data/whatsapp-state.json.legacy.json
+packages/whatsapp-bot/.data/whatsapp-state.sqlite
