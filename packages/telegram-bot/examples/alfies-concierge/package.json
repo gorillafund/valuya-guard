@@ -3,15 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "link:workspace": "mkdir -p node_modules/@valuya && ln -sfn ../../../../../agent node_modules/@valuya/agent",
-    "prebuild": "npm run link:workspace",
+    "link:workspace": "mkdir -p node_modules/@valuya && ln -sfn ../../../../../agent node_modules/@valuya/agent && ln -sfn ../../../../../marketplace-agent-core node_modules/@valuya/marketplace-agent-core && ln -sfn ../../../../ node_modules/@valuya/telegram-bot",
+    "prebuild": "npm run link:workspace && pnpm --filter @valuya/telegram-bot build",
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "prestart": "npm run link:workspace",
+    "prestart": "npm run link:workspace && pnpm --filter @valuya/telegram-bot build",
     "start": "node dist/telegram-bot/examples/alfies-concierge/bot.js"
   },
   "dependencies": {
-    "@valuya/agent": "workspace:^"
+    "@valuya/agent": "workspace:^",
+    "@valuya/marketplace-agent-core": "workspace:^",
+    "@valuya/telegram-bot": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^25.0.10",

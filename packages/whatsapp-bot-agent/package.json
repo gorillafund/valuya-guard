@@ -1,0 +1,23 @@
+{
+  "name": "@valuya/whatsapp-bot-agent",
+  "version": "0.2.0-beta.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @valuya/whatsapp-bot build && tsc -p tsconfig.json",
+    "test": "pnpm run build && node --test dist/**/*.test.js",
+    "start": "node --env-file=.env dist/server.js"
+  },
+  "dependencies": {
+    "@valuya/marketplace-agent-core": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "license": "MIT"
+}

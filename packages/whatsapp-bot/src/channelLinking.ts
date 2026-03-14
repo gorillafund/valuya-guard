@@ -275,7 +275,7 @@ export class GuardWhatsAppLinkService {
         }),
       )
       if (!response.ok || payload?.ok === false) {
-        throw toGuardApiError(response.status, payload)
+        throw toGuardApiError(path, response.status, payload)
       }
 
       return payload as T
@@ -379,42 +379,68 @@ function toLinkedSubject(link: StoredChannelLink): LinkedValuyaSubject {
 
 class GuardApiError extends Error {
   readonly code: LinkErrorCode
+  readonly status?: number
+  readonly payload?: GuardEnvelope
+  readonly path?: string
 
-  constructor(code: LinkErrorCode, message: string) {
+  constructor(code: LinkErrorCode, message: string, details?: {
+    status?: number
+    payload?: GuardEnvelope
+    path?: string
+  }) {
     super(message)
     this.code = code
+    this.status = details?.status
+    this.payload = details?.payload
+    this.path = details?.path
   }
 }
 
-function toGuardApiError(status: number, payload: GuardEnvelope): GuardApiError {
+function toGuardApiError(path: string, status: number, payload: GuardEnvelope): GuardApiError {
   const backendCode = `${payload?.code || payload?.error || payload?.message || ""}`.toLowerCase()
+  const details = { status, payload, path }
 
-  if (status === 404 || backendCode.includes("not_linked")) {
-    return new GuardApiError("not_linked", buildUnlinkedMessage())
+  if (path.endsWith("/resolve") && (status === 404 || backendCode.includes("not_linked"))) {
+    return new GuardApiError("not_linked", buildUnlinkedMessage(), details)
   }
   if (backendCode.includes("invalid") || backendCode.includes("malformed")) {
-    return new GuardApiError("invalid_token", "Ungueltiger Link-Code. Bitte pruefe die LINK Nachricht.")
+    return new GuardApiError("invalid_token", "Ungueltiger Link-Code. Bitte pruefe die LINK Nachricht.", details)
   }
   if (backendCode.includes("expired")) {
     return new GuardApiError(
       "token_expired",
       "Dieser Link-Code ist abgelaufen. Bitte starte Onboarding erneut.",
+      details,
     )
   }
   if (backendCode.includes("already") || backendCode.includes("used")) {
     return new GuardApiError(
       "token_already_used",
       "Dieser Link-Code wurde bereits verwendet. Nutze den neuesten Onboarding-Link.",
+      details,
     )
   }
   if (backendCode.includes("tenant_mismatch")) {
     return new GuardApiError(
       "tenant_mismatch",
       "Dieser Onboarding-Link gehoert zu einem anderen Tenant. Bitte einen neuen Link fuer diesen Bot erzeugen.",
+      details,
     )
   }
 
-  return new GuardApiError("guard_unavailable", "Valuya Guard ist gerade nicht erreichbar. Bitte erneut versuchen.")
+  if (path.endsWith("/redeem") && status === 404) {
+    return new GuardApiError(
+      "guard_unavailable",
+      "Valuya Guard konnte den WhatsApp-Link gerade nicht einloesen. Bitte Backend-Konfiguration pruefen.",
+      details,
+    )
+  }
+
+  return new GuardApiError(
+    "guard_unavailable",
+    "Valuya Guard ist gerade nicht erreichbar. Bitte erneut versuchen.",
+    details,
+  )
 }
 
 function toGuardError(error: unknown): GuardApiError {

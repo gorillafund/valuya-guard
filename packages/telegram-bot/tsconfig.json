@@ -8,7 +8,11 @@
     "strict": true,
     "skipLibCheck": true,
     "lib": ["ES2022", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@valuya/telegram-channel-access": ["../telegram-channel-access/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

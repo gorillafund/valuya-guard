@@ -1,0 +1,591 @@
+[
+  {
+    "dialogue_id": "dlg-milk-browse",
+    "name": "Milchprodukte browsen",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Milch",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "dairy",
+        "expected_should_clarify": false
+      },
+      {
+        "role": "assistant",
+        "message": "Welche Art von Milch meinst du?"
+      },
+      {
+        "role": "user",
+        "message": "Vollmilch",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "dairy",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-additive-bread",
+    "name": "Brot zusaetzlich zum Warenkorb",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Aktueller Warenkorb: 2x Hafermilch"
+      },
+      {
+        "role": "user",
+        "message": "Ich brauche auch Brot",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_selection_mode": "add_to_existing_cart",
+        "expected_family": "brot",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-recipe-switch",
+    "name": "Rezeptwunsch ueberschreibt altes Produkt",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Wie viele Flaschen Tegernseer Helles moechtest du?"
+      },
+      {
+        "role": "user",
+        "message": "Ich moechte Musaka kochen",
+        "expected_intent": "recipe_to_cart",
+        "expected_route_kind": "recipe_to_cart",
+        "expected_family": "musaka",
+        "expected_should_clarify": false,
+        "catastrophic_mismatch": true
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-paella",
+    "name": "Paella Rezept",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Paella",
+        "expected_intent": "recipe_to_cart",
+        "expected_route_kind": "recipe_to_cart",
+        "expected_family": "paella",
+        "expected_should_clarify": false,
+        "catastrophic_mismatch": true
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-party-drinks",
+    "name": "Getraenke fuer Party",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich moechte eine Party mit 10 Leuten feiern",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "getraenke",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-movie-night-snacks",
+    "name": "Snacks fuer Fernsehabend",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Snacks fuer einen Fernsehabend",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "snacks",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-cheese-family",
+    "name": "Kaese family browsing",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Kaese",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "kaese",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-frischkaese-family",
+    "name": "Frischkaese family browsing",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Frischkaese",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "frischkaese",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-cleaning-family",
+    "name": "Putzmittel browsen",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich moechte Putzmittel kaufen",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "putzmittel",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-klopapier",
+    "name": "Klopapier family browsing",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Klopapier",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "household_paper",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-baby-additive",
+    "name": "Baby Nahrung zusaetzlich",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Aktueller Warenkorb: 3x Guli Zitrone-Limette"
+      },
+      {
+        "role": "user",
+        "message": "Und ich brauche auch Baby Nahrung",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_selection_mode": "add_to_existing_cart",
+        "expected_family": "baby",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-pet",
+    "name": "Haustierbedarf browsen",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche etwas fuer mein Haustier",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "haustier",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-breakfast",
+    "name": "Fruehstueck browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche etwas fuers Fruehstueck",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "fruhstuck",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-muesli",
+    "name": "Muesli family browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Muesli",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "muesli",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-pasta-family",
+    "name": "Pasta family browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Pasta",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "pasta",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-rice-family",
+    "name": "Reis family browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Reis",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "reis",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-feinkost",
+    "name": "Feinkost browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Zeig mir Feinkost",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "feinkost",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-antipasti",
+    "name": "Antipasti browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Antipasti",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "antipasti",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-bread-spread",
+    "name": "Brotaufstriche browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich suche Brotaufstriche",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "brotaufstriche",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-canned-goods",
+    "name": "Konserven browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Konserven",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "konserven",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-vegetables",
+    "name": "Gemuese browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Gemuese",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "gemuse",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-meat-family",
+    "name": "Fleisch browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich moechte Fleisch kaufen",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "fleisch",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-sausage-family",
+    "name": "Wurst browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Wurst",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "wurst",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-ham-family",
+    "name": "Schinken browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Schinken",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "schinken",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-bacon-family",
+    "name": "Speck browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Speck",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "speck",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-bodycare",
+    "name": "Koerperpflege browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche Koerperpflege",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "korperpflege",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-baking",
+    "name": "Backen browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche etwas zum Backen",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "backen",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-bread",
+    "name": "Brot browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich moechte Brot kaufen",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "brot",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-drinks-category",
+    "name": "Getraenke browse",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Welche Getraenke gibt es?",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "getraenke",
+        "expected_should_clarify": false
+      },
+      {
+        "role": "assistant",
+        "message": "Moeglich sind alkoholfreie Getraenke, Bier, Wein oder Spirituosen."
+      },
+      {
+        "role": "user",
+        "message": "Spirituosen",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "spirituosen",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-show-more-categories",
+    "name": "Mehr Kategorien",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Welche Kategorie moechtest du durchsuchen? 1. Schokolade 2. Weissweine 3. Kekse"
+      },
+      {
+        "role": "user",
+        "message": "Mehr Kategorien",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-show-more-products",
+    "name": "Mehr davon",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Was moechtest du aus Helles & Maerzen? 1. Zwettler 2. Egger 3. Ottakringer"
+      },
+      {
+        "role": "user",
+        "message": "Mehr davon",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-weak-number",
+    "name": "Nackte Zahl ohne Kontext",
+    "turns": [
+      {
+        "role": "user",
+        "message": "2",
+        "expected_route_kind": "clarify",
+        "expected_should_clarify": true
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-weak-yes",
+    "name": "Ja ohne Kontext",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ja",
+        "expected_route_kind": "clarify",
+        "expected_should_clarify": true
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-referenced-index",
+    "name": "Zweite Option waehlen",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Was moechtest du aus Weissbier? 1. Franziskaner 2. Paulaner 3. Augustiner"
+      },
+      {
+        "role": "user",
+        "message": "2",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-correction-frischkaese",
+    "name": "Korrektur auf Frischkaese",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Wie viele Packungen Amaretti moechtest du?"
+      },
+      {
+        "role": "user",
+        "message": "Nein, ich meine Frischkaese",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "frischkaese",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-only-replace",
+    "name": "Nur X ersetzt Warenkorb",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Aktueller Warenkorb: 2x Milch, 1x Brot"
+      },
+      {
+        "role": "user",
+        "message": "Ich moechte nur Tegernseer Helles",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_selection_mode": "replace_with_single_product",
+        "expected_family": "bier",
+        "expected_should_clarify": false
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-alt-current-cart",
+    "name": "Alternativen fuer aktuellen Warenkorb",
+    "turns": [
+      {
+        "role": "assistant",
+        "message": "Aktueller Warenkorb: 3x Vollmilch, 2x Tegernseer Helles"
+      },
+      {
+        "role": "user",
+        "message": "alt",
+        "expected_route_kind": "clarify",
+        "expected_should_clarify": true
+      }
+    ]
+  },
+  {
+    "dialogue_id": "dlg-toothpaste-family",
+    "name": "Zahnpasta family browsing",
+    "turns": [
+      {
+        "role": "user",
+        "message": "Ich brauche auch Zahnpasta",
+        "context_summary": "history=assistant: Aktueller Warenkorb",
+        "expected_intent": "browse_category",
+        "expected_route_kind": "browse_category",
+        "expected_family": "korperpflege",
+        "expected_should_clarify": false
+      }
+    ]
+  }
+]

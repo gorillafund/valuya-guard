@@ -8,6 +8,7 @@ import {
   summarizeManagedAgentCapacity,
 } from "./managedAgentCapacity.js"
 import { TelegramPaidChannelAccessService } from "./paidChannel.js"
+import { TelegramSmartConcierge, type TelegramConciergeResponse } from "./alfiesSmartConcierge.js"
 
 const TELEGRAM_BOT_TOKEN = requireEnv("TELEGRAM_BOT_TOKEN")
 const N8N_WEBHOOK_URL = resolveN8nWebhookUrl()
@@ -151,6 +152,7 @@ const guardLinking = new GuardTelegramLinkService({
   logger: (event, fields) => logEvent(event, fields),
 })
 const paidChannelAccess = createPaidChannelAccessServiceOrNull()
+const smartConcierge = new TelegramSmartConcierge()
 
 void runBot()
 
@@ -257,6 +259,15 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
   }
 
   try {
+    const local = await smartConcierge.handleMessage({
+      subjectId: smartSubjectId(from.id),
+      message: text,
+      existingOrderId: orderId,
+    })
+    if (local) {
+      await handleLocalConciergeResponse(message.chat.id, userId, local)
+      return
+    }
     const result = await callN8nWithRetry(payload)
     await handleN8nResponse(message.chat.id, userId, result)
   } catch (error) {
@@ -386,7 +397,7 @@ function createPaidChannelAccessServiceOrNull(): TelegramPaidChannelAccessServic
     channelName: TELEGRAM_CHANNEL_NAME,
     channelPlan: TELEGRAM_CHANNEL_PLAN,
     channelInviteUrl: TELEGRAM_CHANNEL_INVITE_URL,
-    logger: (event, fields) => logEvent(event, fields),
+    logger: (event: string, fields: Record<string, unknown>) => logEvent(event, fields),
   })
 }
 
@@ -410,7 +421,7 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
     await answerCallbackQuery(query.id, "Consent saved")
     await sendMessage(
       chatId,
-      "Consent recorded. You can now send a dish and I will execute paid actions on your behalf.",
+      "Consent gespeichert. Du kannst jetzt direkt einen Einkaufswunsch senden oder 'start' fuer die Concierge-Erklaerung schreiben.",
     )
     return
   }
@@ -445,6 +456,18 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
   }
 
   try {
+    if (parsed.action !== "confirm") {
+      const local = await smartConcierge.handleAction({
+        subjectId: smartSubjectId(query.from.id),
+        orderId: parsed.orderId,
+        action: parsed.action,
+      })
+      if (local) {
+        await handleLocalConciergeResponse(chatId, String(query.from.id), local)
+        await answerCallbackQuery(query.id, "Updated")
+        return
+      }
+    }
     const result = await callN8nWithRetry(payload)
     await handleN8nResponse(chatId, String(query.from.id), result)
     await answerCallbackQuery(query.id, "Updated")
@@ -672,6 +695,17 @@ async function handleN8nResponse(
   await sendMessage(chatId, "I could not process that right now. Please retry.")
 }
 
+async function handleLocalConciergeResponse(
+  chatId: number,
+  userId: string,
+  result: TelegramConciergeResponse,
+): Promise<void> {
+  if (result.orderId) {
+    lastOrderByUser.set(userId, result.orderId)
+  }
+  await sendMessage(chatId, result.telegram.text)
+}
+
 function toInlineKeyboard(input: unknown): InlineKeyboardMarkup | undefined {
   if (!input) return undefined
 
@@ -859,6 +893,10 @@ function hasUserConsent(userId: string): boolean {
   return consentByUser.get(userId) === true
 }
 
+function smartSubjectId(telegramUserId: number): string {
+  return `telegram:${telegramUserId}`
+}
+
 async function sendStartMessage(
   chatId: number,
   userId: string,
@@ -867,16 +905,16 @@ async function sendStartMessage(
   const whoami = await getWhoamiSummarySafe()
   const capacityLines = await buildManagedCapacityLines(linkedSubject || null)
   const lines = [
-    "Hi, I am Alfies Concierge.",
-    "I can propose recipes and run payment-gated actions.",
+    "Hi, ich bin Alfies Concierge.",
+    "Ich kann Produkte suchen, Kategorien durchsuchen, Rezepte vorschlagen und Warenkoerbe zusammenstellen.",
     "",
     ...capacityLines,
     ...(capacityLines.length > 0 ? [""] : []),
     ...formatWhoamiLines(whoami),
     "",
     hasUserConsent(userId)
-      ? "Consent already recorded. Send a dish to continue."
-      : "Please confirm consent before I execute paid actions.",
+      ? "Consent ist schon gespeichert. Sende einfach einen Wunsch wie 'Milch', 'Getraenke fuer 6', 'Paella' oder 'Kategorien'."
+      : "Bitte bestaetige zuerst Consent, bevor ich bezahlte Aktionen ausfuehre.",
   ]
 
   const keyboard = hasUserConsent(userId)

@@ -52,5 +52,6 @@
 
 - [Agents](agents.md)
 - [Agentokratia Guardian Integration](agentokratia-guardian-integration.md)
+- [Alfies App Integration](alfies-app-integration.md)
 - [Telegram Bot](telegram-bot.md)
 - [Discord Bot](discord-bot.md)

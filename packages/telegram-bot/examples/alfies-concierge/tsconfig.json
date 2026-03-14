@@ -9,7 +9,9 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@valuya/agent": ["../../../agent/src/index.ts"]
+      "@valuya/agent": ["../../../agent/src/index.ts"],
+      "@valuya/telegram-bot": ["../../src/index.ts"],
+      "@valuya/marketplace-agent-core": ["../../../marketplace-agent-core/src/index.ts"]
     },
     "outDir": "dist"
   },

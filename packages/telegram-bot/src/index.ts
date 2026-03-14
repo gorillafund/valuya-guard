@@ -1,4 +1,5 @@
 export type TelegramSubject = { type: string; id: string }
+export { TelegramSmartConcierge } from "./alfiesSmartConcierge.js"
 export { TelegramPaidChannelAccessService, buildTelegramChannelResource } from "./paidChannel.js"
 export type {
   TelegramPaidChannelAccessConfig,

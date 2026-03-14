@@ -21,6 +21,9 @@
     "test": "pnpm run build && node --test dist/*.test.js",
     "prepublishOnly": "pnpm run build"
   },
+  "dependencies": {
+    "@valuya/channel-access-core": "workspace:^"
+  },
   "devDependencies": {
     "@types/node": "^25.0.10"
   },

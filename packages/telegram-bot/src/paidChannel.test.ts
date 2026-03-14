@@ -28,7 +28,7 @@ test("unlinked user denied", async () => {
   const result = await service.resolveAccess({ telegramUserId: "123" })
   assert.equal(result.allowed, false)
   if (result.allowed) return
-  assert.equal(result.reason, "not_linked")
+  assert.equal(result.state, "not_linked")
 })
 
 test("linked but inactive entitlement denied", async () => {
@@ -48,11 +48,25 @@ test("linked but inactive entitlement denied", async () => {
     channelPlan: "standard",
   })
 
-  await withMockFetch([{ status: 200, body: { active: false, reason: "inactive" } }], async () => {
+  await withMockFetch([{
+    status: 200,
+    body: {
+      ok: true,
+      state: "inactive",
+      resource: "telegram:channel:guarddemobot:premium_alpha",
+      anchor_resource: "telegram:channel:guarddemobot:premium_alpha",
+      plan: "standard",
+      expires_at: null,
+      payment_url: null,
+      reason: "inactive",
+      runtime_config: null,
+      capabilities: { channel_access_version: "1" },
+    },
+  }], async () => {
     const result = await service.resolveAccess({ telegramUserId: "123" })
     assert.equal(result.allowed, false)
     if (result.allowed) return
-    assert.equal(result.reason, "inactive")
+    assert.equal(result.state, "inactive")
     assert.equal(result.protocolSubjectHeader, "user:17")
   })
 })
@@ -75,7 +89,31 @@ test("linked and active entitlement allowed with configured invite URL", async (
     channelInviteUrl: "https://t.me/+premiumInvite",
   })
 
-  await withMockFetch([{ status: 200, body: { active: true } }], async () => {
+  await withMockFetch([{
+    status: 200,
+    body: {
+      ok: true,
+      state: "paid_active",
+      resource: "telegram:channel:guarddemobot:premium_alpha",
+      anchor_resource: "telegram:channel:guarddemobot:premium_alpha",
+      plan: "standard",
+      expires_at: null,
+      payment_url: null,
+      reason: "mandate_active",
+      runtime_config: {
+        mode: "human",
+        channel: "telegram",
+        channel_kind: "channel",
+        provider: null,
+        channel_app_id: null,
+        visit_url: "https://t.me/+premiumInvite",
+        human_routing: null,
+        agent_routing: null,
+        soul: null,
+      },
+      capabilities: { channel_access_version: "1" },
+    },
+  }], async () => {
     const result = await service.resolveAccess({ telegramUserId: "123" })
     assert.equal(result.allowed, true)
     if (!result.allowed) return
@@ -85,7 +123,7 @@ test("linked and active entitlement allowed with configured invite URL", async (
   })
 })
 
-test("entitlement request uses canonical protocol subject header", async () => {
+test("channel-access resolve request uses canonical protocol subject header", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = []
   const service = new TelegramPaidChannelAccessService({
     baseUrl: "https://guard.example",
@@ -104,7 +142,21 @@ test("entitlement request uses canonical protocol subject header", async () => {
   })
 
   await withMockFetch(
-    [{ status: 200, body: { active: true } }],
+    [{
+      status: 200,
+      body: {
+        ok: true,
+        state: "paid_active",
+        resource: "telegram:channel:guarddemobot:premium_alpha",
+        anchor_resource: "telegram:channel:guarddemobot:premium_alpha",
+        plan: "standard",
+        expires_at: null,
+        payment_url: null,
+        reason: "mandate_active",
+        runtime_config: null,
+        capabilities: { channel_access_version: "1" },
+      },
+    }],
     async (input, init) => {
       calls.push({ url: String(input), init })
       return undefined
@@ -117,8 +169,7 @@ test("entitlement request uses canonical protocol subject header", async () => {
 
   assert.equal(calls.length, 1)
   const req = calls[0]
-  assert.ok(req.url.includes("/api/v2/entitlements"))
-  assert.ok(req.url.includes("resource=telegram%3Achannel%3Aguarddemobot%3Apremium_alpha"))
+  assert.ok(req.url.includes("/api/v2/channel-access/resolve"))
   const headers = new Headers(req.init?.headers)
   assert.equal(headers.get("x-valuya-subject-id"), "user:17")
 })

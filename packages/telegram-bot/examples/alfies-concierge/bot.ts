@@ -7,6 +7,13 @@ import {
   isValuyaApiError,
 } from "@valuya/agent"
 import {
+  buildMarketplaceSessionSnapshot,
+  buildPaymentConfirmedReply as buildPaymentConfirmedReplyCore,
+  buildTransactionLines as buildTransactionLinesCore,
+  decideMarketplaceStatus,
+  readMarketplaceTransaction as readMarketplaceTransactionCore,
+} from "@valuya/marketplace-agent-core"
+import {
   buildOrderPayload,
   sendOrderToBackendRequest,
   type OrderPayload,
@@ -23,12 +30,14 @@ import {
   createMarketplaceCheckoutLink,
   createMarketplaceOrder,
   createMarketplaceOrderIntent,
+  getMarketplaceOrder,
 } from "./marketplaceOrders.js"
 import {
   extractLinkedPrivyWalletAddress,
   normalizeWallet as normalizeWalletAddress,
 } from "./walletSelection.js"
 import { DelegatedPaymentError, requestDelegatedPayment } from "./delegatedPayment.js"
+import { TelegramSmartConcierge } from "@valuya/telegram-bot"
 
 type ConciergeAction = "recipe" | "alt" | "confirm" | "cancel"
 
@@ -191,6 +200,7 @@ const guardLinking = new GuardTelegramLinkService({
   linkStore,
   logger: log,
 })
+const smartConcierge = new TelegramSmartConcierge()
 
 if (PLAN.toLowerCase() === "free") {
   throw new Error("VALUYA_PLAN_free_not_allowed")
@@ -300,15 +310,21 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
 
   await sendChatAction(chatId, "typing")
 
-  const response = await callConciergeWithRetry({
-    action: "recipe",
-    orderId,
-    message: text,
-    subject: linked.subject,
-    channelContext: { type: "telegram", id: from.id },
-    actor_type: "agent",
-    channel: "telegram",
-  })
+  const response =
+    await smartConcierge.handleMessage({
+      subjectId: smartSubjectId(from.id, linked.protocolSubjectHeader),
+      message: text,
+      existingOrderId: orderId,
+    }) ||
+    await callConciergeWithRetry({
+      action: "recipe",
+      orderId,
+      message: text,
+      subject: linked.subject,
+      channelContext: { type: "telegram", id: from.id },
+      actor_type: "agent",
+      channel: "telegram",
+    })
 
   updateOrderContextFromConcierge(response)
   await sendConciergeResponse(chatId, response)
@@ -330,15 +346,15 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
   const telegramUserId = query.from.id
   const userId = String(telegramUserId)
 
-  if (parsed.kind === "consent") {
-    consentByUser.set(userId, true)
-    await answerCallback(query.id, "Consent saved")
-    await sendMarkdown(
-      chatId,
-      escapeMarkdownV2("Consent recorded. You can place orders now."),
-    )
-    return
-  }
+    if (parsed.kind === "consent") {
+      consentByUser.set(userId, true)
+      await answerCallback(query.id, "Consent saved")
+      await sendMarkdown(
+        chatId,
+        escapeMarkdownV2("Consent gespeichert. Du kannst jetzt direkt einkaufen oder 'start' fuer die Concierge-Erklaerung senden."),
+      )
+      return
+    }
 
   if (!consentByUser.get(userId)) {
     await answerCallback(query.id, "Please consent first")
@@ -476,14 +492,20 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
     })
 
     try {
-      const response = await callConciergeWithRetry({
-        action: "confirm",
-        orderId: parsed.orderId,
-        subject: resolvedPaymentSubject,
-        channelContext: { type: "telegram", id: telegramUserId },
-        actor_type: "agent",
-        channel: "telegram",
-      })
+      const response =
+        await smartConcierge.handleAction({
+          subjectId: smartSubjectId(telegramUserId, linked.protocolSubjectHeader),
+          orderId: parsed.orderId,
+          action: "confirm",
+        }) ||
+        await callConciergeWithRetry({
+          action: "confirm",
+          orderId: parsed.orderId,
+          subject: resolvedPaymentSubject,
+          channelContext: { type: "telegram", id: telegramUserId },
+          actor_type: "agent",
+          channel: "telegram",
+        })
 
       await answerCallback(query.id, "Updated")
       updateOrderContextFromConcierge(response)
@@ -495,23 +517,57 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
         resource: RESOURCE,
         plan: PLAN,
       })
-      await sendOrderToBackend(orderPayload, backendSubjectId)
+      const backendResponse = await sendOrderToBackend(orderPayload, backendSubjectId)
+      const externalOrderId =
+        readString(readRecord(backendResponse)?.external_order_id) ||
+        readString(readRecord(backendResponse)?.order_id) ||
+        orderPayload.order_id
+      const externalOrderStatus =
+        readString(readRecord(backendResponse)?.status) ||
+        readString(readRecord(backendResponse)?.external_order_status)
+
+      if (paymentResult.valuyaOrderId) {
+        await marketplaceOrderStore.upsert(orderPayload.order_id, {
+          valuya_order_id: paymentResult.valuyaOrderId,
+          protocol_subject_header: backendSubjectId,
+          amount_cents:
+            toInt(orderPayload.meta?.total_cents) ||
+            calculateOrderAmountCents(orderPayload.products) ||
+            1,
+          currency: DELEGATED_CURRENCY,
+          status: "paid_confirmed",
+          external_order_id: externalOrderId,
+          ...(externalOrderStatus ? { external_order_status: externalOrderStatus } : {}),
+          submitted_at: new Date().toISOString(),
+        })
+      }
+
+      let marketplaceOrderStatus: unknown = null
+      if (paymentResult.valuyaOrderId) {
+        try {
+          marketplaceOrderStatus = await getMarketplaceOrder({
+            baseUrl: VALUYA_BASE,
+            tenantToken: VALUYA_TENANT_TOKEN,
+            orderId: paymentResult.valuyaOrderId,
+            protocolSubjectHeader: backendSubjectId,
+          })
+        } catch (error) {
+          logError("marketplace_order_status_after_submit_error", error, {
+            localOrderId: orderPayload.order_id,
+            valuyaOrderId: paymentResult.valuyaOrderId,
+            protocolSubjectHeader: backendSubjectId,
+          })
+        }
+      }
 
       await sendMarkdown(
         chatId,
-        [
-          escapeMarkdownV2(
-            "Ich habe folgende Bestelldaten an das Valuya Backend gesendet (für E-Mail Versand):",
-          ),
-          escapeMarkdownV2(`- Bestellung: ${orderPayload.order_id}`),
-          escapeMarkdownV2("- Kundennummer: 89733"),
-          escapeMarkdownV2("- Lieferadresse: Kaiserstrasse 8/7a, 1070 Wien"),
-          escapeMarkdownV2("- Lieferung: sofort"),
-          escapeMarkdownV2(
-            `- Produkte: ${orderPayload.products.length} Positionen (CSV wird als Anhang per E-Mail mitgesendet)`,
-          ),
-          escapeMarkdownV2("Empfänger: manuel@31third.com"),
-        ].join("\n"),
+        formatMarketplaceStatusText({
+          marketplaceOrder: marketplaceOrderStatus,
+          storedOrder: {
+            external_order_id: externalOrderId,
+          },
+        }),
       )
     } catch (error) {
       await sendOrderFailedMessage(
@@ -524,14 +580,20 @@ async function handleCallback(query: TelegramCallbackQuery): Promise<void> {
     return
   }
 
-  const response = await callConciergeWithRetry({
-    action: parsed.action,
-    orderId: parsed.orderId,
-    subject: resolvedPaymentSubject,
-    channelContext: { type: "telegram", id: telegramUserId },
-    actor_type: "agent",
-    channel: "telegram",
-  })
+  const response =
+    await smartConcierge.handleAction({
+      subjectId: smartSubjectId(telegramUserId, linked.protocolSubjectHeader),
+      orderId: parsed.orderId,
+      action: parsed.action,
+    }) ||
+    await callConciergeWithRetry({
+      action: parsed.action,
+      orderId: parsed.orderId,
+      subject: resolvedPaymentSubject,
+      channelContext: { type: "telegram", id: telegramUserId },
+      actor_type: "agent",
+      channel: "telegram",
+    })
 
   await answerCallback(query.id, "Updated")
   updateOrderContextFromConcierge(response)
@@ -649,12 +711,57 @@ async function handleStatus(
   const entitlement = await getEntitlement(subject)
   const who = await whoamiForSubject(subject)
   const capacityText = await formatManagedCapacityText(subject)
+  const latestMarketplaceOrder = await marketplaceOrderStore.getLatestByProtocolSubject(
+    linked.protocolSubjectHeader || "",
+  )
+  const baseSnapshot = buildMarketplaceSessionSnapshot({
+    entitlementActive: entitlement.active,
+    reason: entitlement.reason,
+    marketplaceOrderId: latestMarketplaceOrder?.valuya_order_id,
+    checkoutUrl: latestMarketplaceOrder?.checkout_url,
+    externalOrderId: latestMarketplaceOrder?.external_order_id,
+    submittedToMerchant: Boolean(latestMarketplaceOrder?.external_order_id),
+  })
+  const statusDecision = decideMarketplaceStatus({
+    snapshot: baseSnapshot,
+    hasMarketplaceOrderStatus: false,
+  })
 
-  if (entitlement.active) {
+  if (statusDecision.kind !== "inactive") {
+    if (statusDecision.kind === "fetch_order_status" && latestMarketplaceOrder?.valuya_order_id) {
+      try {
+        const marketplaceOrder = await getMarketplaceOrder({
+          baseUrl: VALUYA_BASE,
+          tenantToken: VALUYA_TENANT_TOKEN,
+          orderId: latestMarketplaceOrder.valuya_order_id,
+          protocolSubjectHeader: latestMarketplaceOrder.protocol_subject_header,
+        })
+        await sendMarkdown(
+          chatId,
+          [
+            formatMarketplaceStatusText({
+              marketplaceOrder,
+              storedOrder: latestMarketplaceOrder,
+            }),
+            "",
+            ...(capacityText ? [capacityText, ""] : []),
+            formatWhoamiText(who, subject),
+          ].join("\n"),
+        )
+        return
+      } catch (error) {
+        logError("marketplace_order_status_error", error, {
+          valuyaOrderId: latestMarketplaceOrder.valuya_order_id,
+          localOrderId: latestMarketplaceOrder.local_order_id,
+          protocolSubjectHeader: latestMarketplaceOrder.protocol_subject_header,
+        })
+      }
+    }
+
     await sendMarkdown(
       chatId,
       [
-        escapeMarkdownV2("Payment is active for order confirmations."),
+        escapeMarkdownV2("✓ Bezahlt\\. Payment ist aktiv fuer Bestellbestaetigungen\\."),
         "",
         ...(capacityText ? [capacityText, ""] : []),
         formatWhoamiText(who, subject),
@@ -750,16 +857,18 @@ async function handleStart(
   await sendMarkdown(
     chatId,
     [
-      escapeMarkdownV2("Welcome to Alfies Concierge."),
-      escapeMarkdownV2("I can suggest recipes and mock carts."),
-      escapeMarkdownV2("Order confirmation is payment-gated via Valuya Agent."),
+      escapeMarkdownV2("Willkommen bei Alfies Concierge auf Telegram."),
+      escapeMarkdownV2("Ich kann Produkte suchen, Kategorien durchsuchen, Rezepte vorschlagen und Warenkoerbe zusammenstellen."),
+      escapeMarkdownV2("Bestellbestaetigungen laufen weiter ueber den bestehenden Valuya Payment-Flow."),
       "",
       ...(capacityText ? [capacityText, ""] : []),
       ...(paymentSubject && who
         ? [formatWhoamiText(who, paymentSubject)]
         : [escapeMarkdownV2("Link your account via onboarding deep-link /start <token>.")]),
       "",
-      escapeMarkdownV2("Tap consent to allow agent-driven payment requests."),
+      escapeMarkdownV2("Beispiele: 'Milch', 'Getraenke fuer 6', 'Paella', 'Kategorien'."),
+      "",
+      escapeMarkdownV2("Tippe auf Consent, damit ich bestaetigte Bestellungen fuer dich ausfuehren darf."),
     ].join("\n"),
     {
       inline_keyboard: [
@@ -1343,6 +1452,45 @@ function txExplorerUrl(txHash: string, chainId?: number): string | null {
   return `https://polygonscan.com/tx/${h}`
 }
 
+function readMarketplaceTransaction(value: unknown): { txHash?: string; chainId?: number } | null {
+  return readMarketplaceTransactionCore(value)
+}
+
+function buildTransactionLines(tx: { txHash?: string; chainId?: number } | null): string[] {
+  return buildTransactionLinesCore({
+    transaction: tx,
+    language: "de",
+  }).map((line, index) => index === 0 ? escapeMarkdownV2(line) : line)
+}
+
+function formatMarketplaceStatusText(args: {
+  marketplaceOrder: unknown
+  storedOrder: {
+    external_order_id?: string
+  }
+}): string {
+  const tx = readMarketplaceTransaction(args.marketplaceOrder)
+  const externalOrderId = readString(args.storedOrder.external_order_id)
+  const reply = buildPaymentConfirmedReplyCore({
+    transaction: tx,
+    submittedToMerchant: Boolean(externalOrderId),
+    externalOrderId,
+    language: "de",
+  })
+  return [
+    ...reply.split("\n").map((line, index) => {
+      if (line.startsWith("Explorer: ")) {
+        const url = line.slice("Explorer: ".length).trim()
+        return `[PolygonScan](${url})`
+      }
+      return escapeMarkdownV2(line)
+    }),
+    externalOrderId
+      ? null
+      : escapeMarkdownV2("Wenn du die Bestellung jetzt uebergeben willst, tippe erneut auf Confirm\\."),
+  ].filter(Boolean).join("\n")
+}
+
 function canonicalPrincipalForAllowlist(subjectHeader: string): AgentSubject {
   const subject = parseSubjectId(subjectHeader)
   return {
@@ -1461,12 +1609,17 @@ function buildOrderPayloadForBackend(orderId: string): OrderPayload {
   })
 }
 
+function smartSubjectId(telegramUserId: number, protocolSubjectHeader?: string): string {
+  const canonical = String(protocolSubjectHeader || "").trim()
+  return canonical || `telegram:${telegramUserId}`
+}
+
 async function sendOrderToBackend(
   orderPayload: OrderPayload,
   subjectId: string,
   usageIdempotencyKey?: string,
-): Promise<void> {
-  await sendOrderToBackendRequest({
+): Promise<unknown> {
+  return sendOrderToBackendRequest({
     baseUrl: VALUYA_BACKEND_BASE_URL,
     token: VALUYA_BACKEND_TOKEN,
     subjectId,

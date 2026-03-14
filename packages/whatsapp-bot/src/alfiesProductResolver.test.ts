@@ -1,7 +1,8 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import type { CatalogQueryInterpretation } from "./openaiIntent.js"
-import { explainCatalogMiss, parseResolverRules, resolveProductsFromCatalog, resolveProductsFromMessage } from "./alfiesProductResolver.js"
+import { explainCatalogMiss, findAlternativesForCartItems, parseResolverRules, resolveProductsFromCatalog, resolveProductsFromMessage } from "./alfiesProductResolver.js"
+import type { ResolvedRecipeRequest } from "./recipeService.js"
 
 test("parses configured resolver rules", () => {
   const rules = parseResolverRules(
@@ -216,6 +217,55 @@ test("uses interpreted query hints to normalize packaging requests", () => {
   assert.equal(resolved?.lines[0]?.id, 903)
 })
 
+test("rejects weak recipe basket matches when required anchors are missing", () => {
+  const recipeRequest: ResolvedRecipeRequest = {
+    title: "Paella",
+    normalizedDish: "paella",
+    ingredients: ["reis", "paprika", "erbsen", "zwiebel", "knoblauch", "safran", "fond"],
+    requiredAnchors: ["reis", "safran", "fond"],
+  }
+  const resolved = resolveProductsFromCatalog(
+    "reis paprika erbsen zwiebel knoblauch safran fond",
+    [
+      {
+        product_id: 1001,
+        title: "Gemuese Fond",
+        slug: "gemuese-fond",
+        price_cents: 399,
+        currency: "EUR",
+        keywords: ["fond", "gemuese"],
+        category: "Fonds",
+        updated_at: "2026-03-09T00:00:00.000Z",
+      },
+      {
+        product_id: 1002,
+        title: "Hot Jalapeno Salsa",
+        slug: "hot-jalapeno-salsa",
+        price_cents: 650,
+        currency: "EUR",
+        keywords: ["paprika", "salsa"],
+        category: "Saucen",
+        updated_at: "2026-03-09T00:00:00.000Z",
+      },
+      {
+        product_id: 1003,
+        title: "Gemuesesuppe Wuerfel",
+        slug: "gemuesesuppe-wuerfel",
+        price_cents: 199,
+        currency: "EUR",
+        keywords: ["suppe", "gemuese"],
+        category: "Suppen",
+        updated_at: "2026-03-09T00:00:00.000Z",
+      },
+    ],
+    undefined,
+    undefined,
+    recipeRequest,
+  )
+
+  assert.equal(resolved, null)
+})
+
 test("explains catalogue misses with concrete fallback suggestions", () => {
   const message = explainCatalogMiss("kiste bier", [
     {
@@ -232,4 +282,41 @@ test("explains catalogue misses with concrete fallback suggestions", () => {
 
   assert.match(message, /nichts Passendes/)
   assert.match(message, /Helles & Maerzen|Bier Spezialitaeten/)
+})
+
+test("finds alternatives for current cart items instead of inventing a new basket", () => {
+  const result = findAlternativesForCartItems({
+    cart: {
+      items: [
+        { product_id: 1, sku: "vollmilch-a", name: "Stainzer Vollmilch 3,5%", qty: 3, unit_price_cents: 119, currency: "EUR" },
+      ],
+    },
+    products: [
+      {
+        product_id: 1,
+        title: "Stainzer Vollmilch 3,5%",
+        slug: "vollmilch-a",
+        price_cents: 119,
+        currency: "EUR",
+        keywords: ["vollmilch", "milch"],
+        category: "Milch & Alternativen",
+        updated_at: "2026-03-09T00:00:00.000Z",
+      },
+      {
+        product_id: 2,
+        title: "Nöm Vollmilch 3,5%",
+        slug: "vollmilch-b",
+        price_cents: 129,
+        currency: "EUR",
+        keywords: ["vollmilch", "milch"],
+        category: "Milch & Alternativen",
+        updated_at: "2026-03-09T00:00:00.000Z",
+      },
+    ],
+  })
+
+  assert.equal(result.items.length, 1)
+  assert.equal(result.items[0]?.originalName, "Stainzer Vollmilch 3,5%")
+  assert.equal(result.items[0]?.alternative.title, "Nöm Vollmilch 3,5%")
+  assert.equal(result.items[0]?.quantity, 3)
 })

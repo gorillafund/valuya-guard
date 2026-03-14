@@ -53,12 +53,29 @@ test("sqlite state store persists conversation, channel link, and marketplace or
       category: "pasta",
     },
   ])
+  await store.upsertRecipes([
+    {
+      recipe_id: "meal_1",
+      slug: "moussaka",
+      title: "Moussaka",
+      cuisine: "Greek",
+      source: "TheMealDB",
+      aliases: ["moussaka", "musaka"],
+      instructions_short: ["Slice aubergines", "Bake"],
+      updated_at: "2026-03-10T00:00:00.000Z",
+      ingredients: [
+        { recipe_id: "meal_1", name: "Aubergine", quantity: "2", sort_order: 1 },
+        { recipe_id: "meal_1", name: "Faschiertes", quantity: "500g", sort_order: 2 },
+      ],
+    },
+  ])
 
   const conversation = await store.get("user:whatsapp_49123")
   const channelLink = await store.getChannelLink("whatsapp:+49123")
   const profile = await store.getProfile("user:whatsapp_49123")
   const marketplace = await store.getMarketplaceOrderLink("ord_1")
   const alfiesProducts = await store.listAlfiesProducts()
+  const recipes = await store.listRecipes()
 
   assert.equal(conversation?.orderId, "ord_1")
   assert.equal(conversation?.lastRecipe?.title, "Paella")
@@ -72,6 +89,8 @@ test("sqlite state store persists conversation, channel link, and marketplace or
   assert.equal(alfiesProducts.length, 1)
   assert.equal(alfiesProducts[0]?.product_id, 101)
   assert.equal(alfiesProducts[0]?.keywords[0], "pasta")
+  assert.equal(recipes[0]?.title, "Moussaka")
+  assert.equal(recipes[0]?.ingredients[1]?.name, "Faschiertes")
 })
 
 test("legacy json state is migrated automatically when file path still ends with .json", async () => {

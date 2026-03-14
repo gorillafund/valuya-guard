@@ -1,0 +1,32 @@
+{
+  "name": "@valuya/channel-access-core",
+  "version": "0.2.0-beta.1",
+  "description": "Shared channel-access contracts and runtime helpers for Valuya Guard channel packages",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "pnpm run build && node --test dist/*.test.js",
+    "prepublishOnly": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "license": "MIT"
+}

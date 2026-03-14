@@ -1,0 +1,12 @@
+{
+  "totals": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "catastrophic": 0
+  },
+  "family_scorecard": [],
+  "failure_bucket_scorecard": [],
+  "failed_by_family": [],
+  "failed_by_bucket": []
+}

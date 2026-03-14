@@ -31,6 +31,76 @@ export type ShoppingPreferences = {
   bio?: boolean
 }
 
+export type ConversationReferenceItem = {
+  productId?: number
+  sku?: string
+  title: string
+}
+
+export type PendingClarification = {
+  kind: string
+  question: string
+  askedAt: string
+}
+
+export type InteractionState = {
+  phase: "idle" | "browsing" | "disambiguation" | "cart_edit" | "recipe_build" | "checkout"
+  last_assistant_act:
+    | "asked_choice"
+    | "showed_products"
+    | "asked_yes_no"
+    | "confirmed_mutation"
+    | "suggested_recipe"
+    | "asked_quantity"
+    | "asked_clarification"
+    | "summarized_state"
+  expected_reply_type: "option_index" | "yes_no" | "quantity" | "free_text" | "none"
+  repair_mode: boolean
+  pending_clarification_reason?: string | null
+  assumption_under_discussion?: {
+    type: string
+    value: string
+  } | null
+}
+
+export type PaymentHandoffState = {
+  status: string
+  checkoutId?: string
+  checkoutUrl?: string
+  updatedAt: string
+}
+
+export type ActiveProductCandidate = {
+  productId?: number
+  sku?: string
+  title: string
+  unitPriceCents?: number
+  currency?: string
+}
+
+export type ActiveQuestionState =
+  | {
+      kind: "quantity_for_product"
+      productTitle: string
+      packagingHint?: string
+    }
+  | {
+      kind: "packaging_for_product"
+      productTitle: string
+    }
+  | undefined
+
+export type PendingOption = {
+  id: string
+  label: string
+  value: string
+  productId?: number
+  sku?: string
+  unitPriceCents?: number
+  currency?: string
+  action?: "remove" | "only" | "increase" | "set_quantity"
+}
+
 export type PendingDialog =
   | {
       kind: "preferences"
@@ -52,6 +122,28 @@ export type ConversationProfile = {
   alfiesShippingSummary?: string
   shoppingPreferences?: ShoppingPreferences
   pendingDialog?: PendingDialog
+  latestMessage?: string
+  recentConversationHistory?: string[]
+  extractedIntent?: string
+  extractedEntities?: Record<string, unknown>
+  lastShownProducts?: ConversationReferenceItem[]
+  selectedRecipeTitle?: string
+  currentCartSnapshot?: CartState
+  pendingClarification?: PendingClarification
+  interactionState?: InteractionState
+  paymentHandoffState?: PaymentHandoffState
+  activeProductCandidate?: ActiveProductCandidate
+  activeQuestion?: ActiveQuestionState
+  activeEditMode?: "replace_with_single_product" | "add_to_existing_cart" | "update_existing_item_quantity"
+  pendingOptions?: {
+    kind: "product_selection" | "category_selection" | "cart_item_selection" | "cart_item_action" | "occasion_selection"
+    prompt: string
+    options: PendingOption[]
+    offset?: number
+    sourceQuery?: string
+    sourceCategory?: string
+    selectionMode?: "replace_with_single_product" | "add_to_existing_cart"
+  }
 }
 
 export type StoredChannelLink = {
@@ -97,6 +189,60 @@ export type StoredAlfiesProduct = {
   keywords: string[]
   category?: string
   availability_json?: Record<string, unknown>
+  updated_at: string
+}
+
+export type StoredRecipe = {
+  recipe_id: string
+  slug: string
+  title: string
+  cuisine?: string
+  source?: string
+  source_url?: string
+  aliases: string[]
+  instructions_short?: string[]
+  updated_at: string
+}
+
+export type StoredRecipeIngredient = {
+  recipe_id: string
+  name: string
+  quantity?: string
+  unit?: string
+  sort_order: number
+}
+
+export type StoredUnderstandingEvent = {
+  event_id: string
+  subject_id: string
+  channel: string
+  user_message: string
+  context_summary?: string
+  extraction_json?: Record<string, unknown>
+  route_kind: string
+  route_action?: string
+  reference_status?: string
+  pending_options_kind?: string
+  active_edit_mode?: string
+  feedback_signal?: string
+  created_at: string
+}
+
+export type StoredUnderstandingEvalCase = {
+  case_id: string
+  name: string
+  message: string
+  context_summary?: string
+  expected_intent?: string
+  expected_route_kind?: string
+  expected_route_action?: string
+  expected_selection_mode?: "replace_with_single_product" | "add_to_existing_cart"
+  expected_should_clarify?: boolean
+  expected_family?: string
+  expected_categories?: string[]
+  catastrophic_mismatch?: boolean
+  notes?: string
+  created_at: string
   updated_at: string
 }
 
@@ -459,6 +605,259 @@ export class FileStateStore {
     }))
   }
 
+  async upsertRecipes(recipes: Array<StoredRecipe & { ingredients: StoredRecipeIngredient[] }>): Promise<void> {
+    await this.ensureReady()
+    for (const recipe of recipes) {
+      await this.exec(
+        `insert into recipes (
+           recipe_id, slug, title, cuisine, source, source_url, aliases_json, instructions_json, updated_at
+         ) values (
+           ${sqlString(recipe.recipe_id)},
+           ${sqlString(recipe.slug)},
+           ${sqlString(recipe.title)},
+           ${sqlStringOrNull(recipe.cuisine)},
+           ${sqlStringOrNull(recipe.source)},
+           ${sqlStringOrNull(recipe.source_url)},
+           ${sqlJson(recipe.aliases || [])},
+           ${sqlJson(recipe.instructions_short || [])},
+           ${sqlString(recipe.updated_at)}
+         )
+         on conflict(recipe_id) do update set
+           slug = excluded.slug,
+           title = excluded.title,
+           cuisine = excluded.cuisine,
+           source = excluded.source,
+           source_url = excluded.source_url,
+           aliases_json = excluded.aliases_json,
+           instructions_json = excluded.instructions_json,
+           updated_at = excluded.updated_at;`,
+      )
+      await this.exec(`delete from recipe_ingredients where recipe_id = ${sqlString(recipe.recipe_id)};`)
+      for (const ingredient of recipe.ingredients || []) {
+        await this.exec(
+          `insert into recipe_ingredients (
+             recipe_id, ingredient_name, quantity, unit, sort_order
+           ) values (
+             ${sqlString(recipe.recipe_id)},
+             ${sqlString(ingredient.name)},
+             ${sqlStringOrNull(ingredient.quantity)},
+             ${sqlStringOrNull(ingredient.unit)},
+             ${Math.trunc(Number(ingredient.sort_order || 0))}
+           );`,
+        )
+      }
+    }
+  }
+
+  async listRecipes(): Promise<Array<StoredRecipe & { ingredients: StoredRecipeIngredient[] }>> {
+    await this.ensureReady()
+    const recipes = await this.query(
+      `select recipe_id, slug, title, cuisine, source, source_url, aliases_json, instructions_json, updated_at
+       from recipes
+       order by title asc;`,
+    )
+    const ingredients = await this.query(
+      `select recipe_id, ingredient_name, quantity, unit, sort_order
+       from recipe_ingredients
+       order by recipe_id asc, sort_order asc;`,
+    )
+    const byRecipe = new Map<string, StoredRecipeIngredient[]>()
+    for (const row of ingredients) {
+      const recipeId = String(row.recipe_id || "")
+      if (!recipeId) continue
+      const list = byRecipe.get(recipeId) || []
+      list.push({
+        recipe_id: recipeId,
+        name: String(row.ingredient_name || ""),
+        quantity: readOptionalString(row.quantity),
+        unit: readOptionalString(row.unit),
+        sort_order: toInt(row.sort_order) || 0,
+      })
+      byRecipe.set(recipeId, list)
+    }
+    return recipes.map((row) => ({
+      recipe_id: String(row.recipe_id || ""),
+      slug: String(row.slug || ""),
+      title: String(row.title || ""),
+      cuisine: readOptionalString(row.cuisine),
+      source: readOptionalString(row.source),
+      source_url: readOptionalString(row.source_url),
+      aliases: parseJsonObject<string[]>(row.aliases_json) || [],
+      instructions_short: parseJsonObject<string[]>(row.instructions_json) || [],
+      updated_at: String(row.updated_at || ""),
+      ingredients: byRecipe.get(String(row.recipe_id || "")) || [],
+    }))
+  }
+
+  async appendUnderstandingEvent(
+    event: StoredUnderstandingEvent,
+  ): Promise<void> {
+    await this.ensureReady()
+    await this.exec(
+      `insert into understanding_events (
+         event_id, subject_id, channel, user_message, context_summary,
+         extraction_json, route_kind, route_action, reference_status,
+         pending_options_kind, active_edit_mode, feedback_signal, created_at
+       ) values (
+         ${sqlString(event.event_id)},
+         ${sqlString(event.subject_id)},
+         ${sqlString(event.channel)},
+         ${sqlString(event.user_message)},
+         ${sqlStringOrNull(event.context_summary)},
+         ${sqlJson(event.extraction_json)},
+         ${sqlString(event.route_kind)},
+         ${sqlStringOrNull(event.route_action)},
+         ${sqlStringOrNull(event.reference_status)},
+         ${sqlStringOrNull(event.pending_options_kind)},
+         ${sqlStringOrNull(event.active_edit_mode)},
+         ${sqlStringOrNull(event.feedback_signal)},
+         ${sqlString(event.created_at)}
+       );`,
+    )
+  }
+
+  async listUnderstandingEvents(args?: {
+    limit?: number
+    feedbackOnly?: boolean
+  }): Promise<StoredUnderstandingEvent[]> {
+    await this.ensureReady()
+    const limit = Math.max(1, Math.min(5000, Math.trunc(Number(args?.limit || 100))))
+    const feedbackWhere = args?.feedbackOnly ? "where feedback_signal is not null" : ""
+    const rows = await this.query(
+      `select event_id, subject_id, channel, user_message, context_summary,
+              extraction_json, route_kind, route_action, reference_status,
+              pending_options_kind, active_edit_mode, feedback_signal, created_at
+       from understanding_events
+       ${feedbackWhere}
+       order by created_at desc
+       limit ${limit};`,
+    )
+    return rows.map((row) => ({
+      event_id: String(row.event_id || ""),
+      subject_id: String(row.subject_id || ""),
+      channel: String(row.channel || ""),
+      user_message: String(row.user_message || ""),
+      context_summary: readOptionalString(row.context_summary),
+      extraction_json: parseJsonObject<Record<string, unknown>>(row.extraction_json),
+      route_kind: String(row.route_kind || ""),
+      route_action: readOptionalString(row.route_action),
+      reference_status: readOptionalString(row.reference_status),
+      pending_options_kind: readOptionalString(row.pending_options_kind),
+      active_edit_mode: readOptionalString(row.active_edit_mode),
+      feedback_signal: readOptionalString(row.feedback_signal),
+      created_at: String(row.created_at || ""),
+    }))
+  }
+
+  async upsertUnderstandingEvalCase(
+    patch: Omit<StoredUnderstandingEvalCase, "created_at" | "updated_at"> & { created_at?: string },
+  ): Promise<StoredUnderstandingEvalCase> {
+    await this.ensureReady()
+    const now = new Date().toISOString()
+    const merged: StoredUnderstandingEvalCase = {
+      case_id: String(patch.case_id || "").trim(),
+      name: String(patch.name || "").trim(),
+      message: String(patch.message || "").trim(),
+      context_summary: patch.context_summary?.trim() || undefined,
+      expected_intent: patch.expected_intent?.trim() || undefined,
+      expected_route_kind: patch.expected_route_kind?.trim() || undefined,
+      expected_route_action: patch.expected_route_action?.trim() || undefined,
+      expected_selection_mode:
+        patch.expected_selection_mode === "replace_with_single_product" ||
+        patch.expected_selection_mode === "add_to_existing_cart"
+          ? patch.expected_selection_mode
+          : undefined,
+      expected_should_clarify:
+        typeof patch.expected_should_clarify === "boolean"
+          ? patch.expected_should_clarify
+          : undefined,
+      expected_family: patch.expected_family?.trim() || undefined,
+      expected_categories: Array.isArray(patch.expected_categories)
+        ? patch.expected_categories.map((value) => String(value || "").trim()).filter(Boolean)
+        : undefined,
+      catastrophic_mismatch:
+        typeof patch.catastrophic_mismatch === "boolean"
+          ? patch.catastrophic_mismatch
+          : undefined,
+      notes: patch.notes?.trim() || undefined,
+      created_at: patch.created_at || now,
+      updated_at: now,
+    }
+    if (!merged.case_id) throw new Error("understanding_eval_case_id_required")
+    if (!merged.name) throw new Error("understanding_eval_case_name_required")
+    if (!merged.message) throw new Error("understanding_eval_case_message_required")
+    await this.exec(
+      `insert into understanding_eval_cases (
+         case_id, name, message, context_summary, expected_intent,
+         expected_route_kind, expected_route_action, expected_selection_mode,
+         expected_should_clarify, expected_family, expected_categories_json,
+         catastrophic_mismatch, notes, created_at, updated_at
+       ) values (
+         ${sqlString(merged.case_id)},
+         ${sqlString(merged.name)},
+         ${sqlString(merged.message)},
+         ${sqlStringOrNull(merged.context_summary)},
+         ${sqlStringOrNull(merged.expected_intent)},
+         ${sqlStringOrNull(merged.expected_route_kind)},
+         ${sqlStringOrNull(merged.expected_route_action)},
+         ${sqlStringOrNull(merged.expected_selection_mode)},
+         ${typeof merged.expected_should_clarify === "boolean" ? (merged.expected_should_clarify ? "1" : "0") : "null"},
+         ${sqlStringOrNull(merged.expected_family)},
+         ${sqlJson(merged.expected_categories)},
+         ${typeof merged.catastrophic_mismatch === "boolean" ? (merged.catastrophic_mismatch ? "1" : "0") : "null"},
+         ${sqlStringOrNull(merged.notes)},
+         ${sqlString(merged.created_at)},
+         ${sqlString(merged.updated_at)}
+       )
+       on conflict(case_id) do update set
+         name = excluded.name,
+         message = excluded.message,
+         context_summary = excluded.context_summary,
+         expected_intent = excluded.expected_intent,
+         expected_route_kind = excluded.expected_route_kind,
+         expected_route_action = excluded.expected_route_action,
+         expected_selection_mode = excluded.expected_selection_mode,
+         expected_should_clarify = excluded.expected_should_clarify,
+         expected_family = excluded.expected_family,
+         expected_categories_json = excluded.expected_categories_json,
+         catastrophic_mismatch = excluded.catastrophic_mismatch,
+         notes = excluded.notes,
+         updated_at = excluded.updated_at;`,
+    )
+    return merged
+  }
+
+  async listUnderstandingEvalCases(limit = 1000): Promise<StoredUnderstandingEvalCase[]> {
+    await this.ensureReady()
+    const safeLimit = Math.max(1, Math.min(5000, Math.trunc(Number(limit || 1000))))
+    const rows = await this.query(
+      `select case_id, name, message, context_summary, expected_intent,
+              expected_route_kind, expected_route_action, expected_selection_mode,
+              expected_should_clarify, expected_family, expected_categories_json,
+              catastrophic_mismatch, notes, created_at, updated_at
+       from understanding_eval_cases
+       order by updated_at desc
+       limit ${safeLimit};`,
+    )
+    return rows.map((row) => ({
+      case_id: String(row.case_id || ""),
+      name: String(row.name || ""),
+      message: String(row.message || ""),
+      context_summary: readOptionalString(row.context_summary),
+      expected_intent: readOptionalString(row.expected_intent),
+      expected_route_kind: readOptionalString(row.expected_route_kind),
+      expected_route_action: readOptionalString(row.expected_route_action),
+      expected_selection_mode: readOptionalString(row.expected_selection_mode) as StoredUnderstandingEvalCase["expected_selection_mode"],
+      expected_should_clarify: readOptionalBoolean(row.expected_should_clarify),
+      expected_family: readOptionalString(row.expected_family),
+      expected_categories: parseJsonObject<string[]>(row.expected_categories_json),
+      catastrophic_mismatch: readOptionalBoolean(row.catastrophic_mismatch),
+      notes: readOptionalString(row.notes),
+      created_at: String(row.created_at || ""),
+      updated_at: String(row.updated_at || ""),
+    }))
+  }
+
   private async ensureReady(): Promise<void> {
     if (!this.initPromise) {
       this.initPromise = this.initialize()
@@ -530,6 +929,58 @@ export class FileStateStore {
         keywords_json text,
         category text,
         availability_json text,
+        updated_at text not null
+      );
+      create table if not exists recipes (
+        recipe_id text primary key,
+        slug text not null,
+        title text not null,
+        cuisine text,
+        source text,
+        source_url text,
+        aliases_json text,
+        instructions_json text,
+        updated_at text not null
+      );
+      create table if not exists recipe_ingredients (
+        recipe_id text not null,
+        ingredient_name text not null,
+        quantity text,
+        unit text,
+        sort_order integer not null default 0
+      );
+      create table if not exists understanding_events (
+        event_id text primary key,
+        subject_id text not null,
+        channel text not null,
+        user_message text not null,
+        context_summary text,
+        extraction_json text,
+        route_kind text not null,
+        route_action text,
+        reference_status text,
+        pending_options_kind text,
+        active_edit_mode text,
+        feedback_signal text,
+        created_at text not null
+      );
+      create index if not exists idx_understanding_events_created_at on understanding_events(created_at desc);
+      create index if not exists idx_understanding_events_feedback on understanding_events(feedback_signal);
+      create table if not exists understanding_eval_cases (
+        case_id text primary key,
+        name text not null,
+        message text not null,
+        context_summary text,
+        expected_intent text,
+        expected_route_kind text,
+        expected_route_action text,
+        expected_selection_mode text,
+        expected_should_clarify integer,
+        expected_family text,
+        expected_categories_json text,
+        catastrophic_mismatch integer,
+        notes text,
+        created_at text not null,
         updated_at text not null
       );
     `)
@@ -699,6 +1150,17 @@ function readOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   return trimmed ? trimmed : undefined
+}
+
+function readOptionalBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1 ? true : value === 0 ? false : undefined
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase()
+    if (trimmed === "1" || trimmed === "true") return true
+    if (trimmed === "0" || trimmed === "false") return false
+  }
+  return undefined
 }
 
 export function normalizeCart(input: unknown): CartState | undefined {

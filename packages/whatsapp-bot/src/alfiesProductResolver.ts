@@ -1,5 +1,6 @@
 import type { ShoppingPreferences, StoredAlfiesProduct } from "./stateStore.js"
 import type { CatalogQueryInterpretation } from "./openaiIntent.js"
+import type { ResolvedRecipeRequest } from "./recipeService.js"
 
 export type AlfiesResolvedLine = {
   id: number
@@ -56,6 +57,7 @@ export function resolveProductsFromCatalog(
   products: StoredAlfiesProduct[],
   preferences?: ShoppingPreferences,
   interpretedQuery?: CatalogQueryInterpretation,
+  recipeRequest?: ResolvedRecipeRequest | null,
 ): { lines: AlfiesResolvedLine[]; label?: string } | null {
   const normalized = normalize(message)
   const interpretedTokens = interpretedQuery
@@ -100,6 +102,7 @@ export function resolveProductsFromCatalog(
     .slice(0, 4)
 
   if (!scored.length) return null
+  if (recipeRequest && !passesRecipeQualityGate(scored, recipeRequest)) return null
 
   return {
     lines: scored.map(({ product }) => ({
@@ -137,6 +140,62 @@ export function explainCatalogMiss(
     `Am ehesten koennte ich stattdessen in ${suggestions.join(", ")} suchen.`,
     "Wenn du magst, formuliere den Wunsch etwas konkreter.",
   ].join("\n")
+}
+
+export function findAlternativesForCartItems(args: {
+  cart: { items?: unknown[] }
+  products: StoredAlfiesProduct[]
+  preferences?: ShoppingPreferences
+}): {
+  items: Array<{
+    originalName: string
+    alternative: StoredAlfiesProduct
+    quantity: number
+  }>
+} {
+  const cartItems = Array.isArray(args.cart?.items) ? args.cart.items : []
+  const alternatives = cartItems
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => {
+      const originalName = String(item.name || item.title || "").trim()
+      const originalSku = typeof item.sku === "string" ? item.sku : undefined
+      const originalProductId = typeof item.product_id === "number" ? Math.trunc(item.product_id) : undefined
+      const quantity = Math.max(1, Math.trunc(Number(item.qty || 1)))
+      if (!originalName) return null
+      const tokens = new Set(tokenize([originalName].join(" ")))
+      const candidates = args.products
+        .filter((product) =>
+          product.product_id !== originalProductId &&
+          (!originalSku || product.slug !== originalSku),
+        )
+        .map((product) => {
+          const productTokens = buildProductTokens(product)
+          const overlap = productTokens.filter((token) => tokens.has(token)).length
+          const categoryMatch = normalize(String(product.category || "")) === normalize(String(item.category || "")) ? 2 : 0
+          const preferenceBoost = computePreferenceBoost(product, args.preferences)
+          return {
+            product,
+            score: overlap * 5 + categoryMatch + preferenceBoost,
+          }
+        })
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) =>
+          b.score - a.score ||
+          comparePrice(a.product, b.product, args.preferences) ||
+          a.product.title.localeCompare(b.product.title),
+        )
+      const best = candidates[0]?.product
+      return best
+        ? {
+            originalName,
+            alternative: best,
+            quantity,
+          }
+        : null
+    })
+    .filter((entry): entry is { originalName: string; alternative: StoredAlfiesProduct; quantity: number } => Boolean(entry))
+
+  return { items: alternatives }
 }
 
 function normalize(value: string): string {
@@ -308,6 +367,31 @@ function inferSuggestionCategories(messageTokens: Set<string>, products: StoredA
   return [...suggestions].slice(0, 3)
 }
 
+function passesRecipeQualityGate(
+  scored: Array<{
+    product: StoredAlfiesProduct
+    directOverlap: string[]
+    categoryOverlap: string[]
+    preferenceBoost: number
+    score: number
+  }>,
+  recipeRequest: ResolvedRecipeRequest,
+): boolean {
+  const matchedTokens = new Set<string>()
+  for (const entry of scored) {
+    for (const token of buildProductTokens(entry.product)) matchedTokens.add(token)
+  }
+  const anchorHits = recipeRequest.requiredAnchors.filter((anchor) => matchedTokens.has(normalize(anchor))).length
+  if (anchorHits < Math.min(2, recipeRequest.requiredAnchors.length)) return false
+  if (scored.some((entry) => isForbiddenRecipeCategory(entry.product.category))) return false
+  return true
+}
+
+function isForbiddenRecipeCategory(category: string | undefined): boolean {
+  const normalized = normalize(String(category || ""))
+  return FORBIDDEN_RECIPE_CATEGORY_SIGNALS.some((signal) => normalized.includes(signal))
+}
+
 function isDrinksCategory(category: string, productTokens: Set<string>, messageTokens: Set<string>): boolean {
   if (category.includes("drink") || category.includes("beverage")) return true
   if (category.includes("beer") || category.includes("wine")) return true
@@ -392,3 +476,14 @@ const TOKEN_SYNONYMS: Record<string, string[]> = {
   chips: ["snacks"],
   snack: ["chips"],
 }
+
+const FORBIDDEN_RECIPE_CATEGORY_SIGNALS = [
+  "putz",
+  "reinigung",
+  "haushalt",
+  "koerperpflege",
+  "korperpflege",
+  "baby",
+  "haustier",
+  "pet",
+]

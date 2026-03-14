@@ -1,0 +1,35 @@
+[
+  {
+    "proposal_id": "proposal-missed_correction-instant noodles",
+    "failure_bucket": "missed_correction",
+    "family": "instant noodles",
+    "example_messages": [
+      "Nein, definitiv keine Flaschen"
+    ],
+    "affected_case_ids": [
+      "event-f06d8f8c-881e-4d69-9eeb-ff7c98c10ee0"
+    ],
+    "suggested_aliases": [
+      "nein",
+      "definitiv",
+      "keine",
+      "flaschen",
+      "instant noodles"
+    ],
+    "suggested_guard_phrases": [
+      "prefer clarification over unsafe mutation when confidence is weak"
+    ],
+    "suggested_prompt_examples": [
+      "Message: \"Nein, definitiv keine Flaschen\" -> prefer conservative grounding and clarify if unsafe to act"
+    ],
+    "suggested_seed_cases": [
+      "seed:missed_correction:instant noodles:1:Nein, definitiv keine Flaschen"
+    ],
+    "notes": [
+      "Clustered 1 failing turns in bucket missed_correction.",
+      "Most cases center on family instant noodles.",
+      "Use these proposals as reviewed inputs for aliases, deterministic guards, prompts, and new seed eval cases."
+    ],
+    "review_status": "pending"
+  }
+]

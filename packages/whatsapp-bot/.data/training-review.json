@@ -1,0 +1,32 @@
+[
+  {
+    "case_id": "event-f06d8f8c-881e-4d69-9eeb-ff7c98c10ee0",
+    "source": "traffic_failure",
+    "name": "whatsapp:Nein, definitiv keine Flaschen",
+    "message": "Nein, definitiv keine Flaschen",
+    "context_summary": "address_hint=Kaiserstraße 3, 10012 Wien; selected_recipe=Direktauswahl: Ben's Original Express Langkorn-Reis; last_shown=Ben's Original Express Langkorn-Reis; pending_clarification=Kannst du das kurz genauer sagen?; phase=cart_edit; expected_reply=quantity; assumption=Mama Instant Noodles Garnelen; dialogue_move=continue; selection_mode=clarify; context_relation=use_current; history=user: 7 || user: 1 || user: garnelen || user: Nein, definitiv keine Flaschen",
+    "expected_intent": "search_product",
+    "expected_route_kind": "clarify",
+    "expected_should_clarify": true,
+    "expected_family": "instant noodles",
+    "expected_categories": [
+      "instant noodles",
+      "seafood"
+    ],
+    "catastrophic_mismatch": true,
+    "suggested_failure_bucket": "missed_correction",
+    "actual_intent": "search_product",
+    "actual_route_kind": "clarify",
+    "actual_selection_mode": "replace_with_single_product",
+    "actual_should_clarify": true,
+    "actual_family": "instant noodles",
+    "actual_categories": [
+      "instant noodles",
+      "seafood"
+    ],
+    "failure_bucket": "missed_correction",
+    "failures": [],
+    "review_status": "pending",
+    "notes": "review suggested; feedback_signal=correction; governance=undefined"
+  }
+]

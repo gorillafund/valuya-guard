@@ -5,8 +5,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @valuya/channel-access-core build && pnpm --filter @valuya/telegram-channel-access build && pnpm --filter @valuya/whatsapp-bot build && tsc -p tsconfig.json",
     "test": "pnpm run build && node --test dist/*.test.js",
+    "start": "pnpm run start:bot",
     "start:bot": "node --env-file=.env dist/app.js",
     "build:alfies": "tsc -p examples/alfies-concierge/tsconfig.json",
     "start:alfies": "node examples/alfies-concierge/dist/telegram-bot/examples/alfies-concierge/bot.js"
@@ -14,6 +15,7 @@
   "dependencies": {
     "@valuya/core": "workspace:^",
     "@valuya/agent": "workspace:^",
+    "@valuya/telegram-channel-access": "workspace:^",
     "dotenv": "^16.6.1"
   },
   "devDependencies": {

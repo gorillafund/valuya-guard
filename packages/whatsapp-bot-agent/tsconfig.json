@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "outDir": "dist",
+    "strict": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@valuya/marketplace-agent-core": ["../marketplace-agent-core/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}
